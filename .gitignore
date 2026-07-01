@@ -1,0 +1,36 @@
+# Data directories
+MEAD
+MEAD_processed
+
+# Training / inference outputs
+output/
+inference_output/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Jupyter / IDEs
+.ipynb_checkpoints
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# Large media (if generated locally and not meant for the repo)
+# sanity_grid.jpg
+# sanity_grid_v2.jpg

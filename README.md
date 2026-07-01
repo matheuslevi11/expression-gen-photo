@@ -1,160 +1,130 @@
-# [CVPR 2025 Highlight] Generative Photography 
+# Generative Photography → Generative Expressions (MEAD adaptation)
 
-This repository is the official implementation of [Generative Photography](https://arxiv.org/abs/2412.02168).
+This is a **fork-style adaptation** of [Generative Photography (CVPR 2025)](https://arxiv.org/abs/2412.02168) that swaps the camera-parameter axis (bokeh / focal length / shutter speed / colour temperature) for a **facial expression intensity** axis. The architecture, attention injection mechanism, and motion-module pipeline are preserved; only the conditioning signal, dataset, and training/inference entry points are replaced.
 
-> **Generative Photography: Scene-Consistent Camera Control for Realistic Text-to-Image Synthesis** <br>
-> [Yu Yuan](https://yuyuan-space.github.io/), [Xijun Wang](https://www.linkedin.com/in/xijun-wang-747475208/), [Yichen Sheng](https://shengcn.github.io/), [Prateek Chennuri](https://www.linkedin.com/in/prateek-chennuri-3a25a8171/), [Xingguang Zhang](https://xg416.github.io/), [Stanley Chan](https://engineering.purdue.edu/ChanGroup/stanleychan.html)<br>
+The original paper, model weights, and Hugging Face resources are still relevant: the SD1.5 backbone, the merged UNet, the RealEstate10K image LoRA, and the AnimateDiff v3 motion module are all reused **as-is** and frozen during training.
 
-## [[Paper](https://arxiv.org/abs/2412.02168)] [[Project Page](https://yuyuan-space.github.io/GenerativePhotography/)] [[Dataset](https://huggingface.co/datasets/pandaphd/camera_settings)] [[Weights](https://huggingface.co/pandaphd/generative_photography)] [[HF Demo](https://huggingface.co/spaces/pandaphd/generative_photography)]
+The high-level design rationale is in [`docs/expression-adaptation-plan.md`](docs/expression-adaptation-plan.md).
 
-![GenPhoto Example](project_page/static/images/Genphoto.gif)
+## What changed vs. the original repo
 
+| Concern | Original | This fork |
+|---|---|---|
+| Conditioning axis | bokeh / focal / shutter / color temp | facial expression intensity (AU12 / smile by default) |
+| Dataset | `genphoto/data/dataset.py` (camera classes) | `genphoto/data/expression_dataset.py` (`ExpressionMEAD`) |
+| Physical embedding | bokeh kernel / crop mask / sensor sim / WB curve | scalar intensity broadcast (`create_intensity_embedding`) |
+| CCL embedding | text diffs of `<bokeh kernel size: ...>` etc. | text diffs of `<smile intensity: ...>` |
+| Training entry | 4× `train_*.py` | `train_expression.py` |
+| Inference entry | 4× `inference_*.py` | `inference_expression.py` |
+| Preprocessing | offline simulation from base images | `scripts/preprocess_mead.py` (raw .mp4 → cropped frames + AU12) |
+| Eval (accuracy) | Laplacian / FOV correlation | `comp_metrics/expression_au_accuracy.py` (AU12 vs target Pearson r) |
+| Removed | BokehMe, depth_any, Gradio app, camera configs | — |
 
-## 🔥 Latest News!!
-* [April 4, 2025]: Generative Photography has been selected as **CVPR 2025 Highlight**! 
-* [March 28, 2025]: The [demo](https://huggingface.co/spaces/pandaphd/generative_photography) is accepted by **CVPR 2025 Demo**.
-* [March 25, 2025]: The CVPR camera-ready paper is now available on arXiv.
-* [March 18, 2025]: Focused news on [Purdue ECE](https://engineering.purdue.edu/ECE/News/2025/generative-photography-lays-new-foundations-for-imaging)
-* [March 4, 2025]: Release the Hugging Face Gradio online demo.
-* [March 3, 2025]: Release offical code and pre-trained weights.
-* [Feb 26, 2025]: Paper is accepted by **CVPR 2025**!
-* [Dec 20, 2024]: Release dataset.
+The 6-channel layout (3 physical + 3 CCL) is preserved, so `cin: 384` in the encoder config is unchanged.
 
+## 1. Environment
 
-## Configurations
-### 1. Environment
-* CUDA 12.1, 64-bit Python 3.10 and PyTorch 2.1.1
-* Other environments may also work, at least for PyTorch 1.13.1 and CUDA 11.7
-* Users can use the following commands to install the packages
 ```bash
 conda env create -f environment.yaml
 conda activate genphoto
 ```
 
-### 2. Prepare Models and Weights
-* Download Stable Diffusion V1.5 (SD1.5) and  pre-trained weights from [Hugging Face](https://huggingface.co/pandaphd/generative_photography). Please note that we add the folder `unet_merged` into Stable Diffusion V1.5 (SD1.5).
+`mediapipe` and `py-feat` are required for preprocessing; `lpips` is required for the consistency metric.
 
-### 3. Modify the File Configuration
-* Modify the configuration yaml files in `config` folders, replace all the dataset & ckpt roots with yours
+## 2. Pretrained backbones to download
 
+You still need the same upstream artifacts as the original paper:
 
-* Replace the `sys.path.append` line in `genphoto/data/dataset.py` with your own BokehMe folder path
-```python
-sys.path.append('/your_path/genphoto/data/BokehMe/')
+- **Stable Diffusion v1.5** with the GenPhoto-style `unet_merged` subfolder (from [pandaphd/generative_photography](https://huggingface.co/pandaphd/generative_photography)).
+- **RealEstate10K image LoRA** (`RealEstate10K_LoRA.ckpt`).
+- **AnimateDiff v3 motion module** (`v3_sd15_mm.ckpt`).
+
+You do **not** need the released camera adaptor checkpoints — the expression encoder + attention `merge` parameters are trained from scratch.
+
+## 3. MEAD preprocessing
+
+Download MEAD from the [official source](https://wywu.github.io/projects/MEAD/MEAD.html) and point the script at the root.
+
+```bash
+python scripts/preprocess_mead.py \
+    --mead-root /data/MEAD \
+    --out-root  /data/MEAD_processed \
+    --emotion happy \
+    --view front \
+    --frames-per-clip 24 \
+    --au-method pyfeat \
+    --val-actors W009 W011    # held-out actors for validation
 ```
 
+Output layout:
 
-* Replace all instances of `self.CLIPTokenizer` and `self.CLIPTextModel` in `genphoto/data/dataset.py` with your own Stable Diffusion v1.5 path
-Replace all instances of `CLIPTokenizer` and `CLIPTextModel` in `genphoto/data/dataset.py` with your own Stable Diffusion v1.5 path:
-```python
-self.tokenizer = CLIPTokenizer.from_pretrained("/your_path/stable-diffusion-v1-5/", subfolder="tokenizer")
-self.text_encoder = CLIPTextModel.from_pretrained("/your_path/stable-diffusion-v1-5/", subfolder="text_encoder")
+```
+/data/MEAD_processed/
+    frames/<actor>/<emotion>/level_<n>/<clip>/frame_*.jpg
+    annotations/train.json
+    annotations/validation.json
 ```
 
+If you cannot install `py-feat`, use `--au-method timeline` for a triangular-ramp proxy that lets you smoke-test the pipeline before installing the real AU detector.
 
+## 4. Training
 
-## Inference
+Edit `configs/train_genphoto/expression.yaml` to point at your preprocessed dataset and the pretrained backbones, then:
 
-```python 
-# For bokeh rendering
-python inference_bokehK.py --config configs/inference_genphoto/adv3_256_384_genphoto_relora_bokehK.yaml --base_scene "A young boy wearing an orange jacket is standing on a crosswalk, waiting to cross the street." --bokehK_list "[2.44, 8.3, 10.1, 17.2, 24.0]"
-
-# For focal length
-python inference_focal_length.py --config configs/inference_genphoto/adv3_256_384_genphoto_relora_focal_length.yaml --base_scene "A cozy living room with a large, comfy sofa and a coffee table." --focal_length_list "[25.0, 35.0, 45.0, 55.0, 65.0]"
-
-# For shutter speed
-python inference_shutter_speed.py --config configs/inference_genphoto/adv3_256_384_genphoto_relora_shutter_speed.yaml --base_scene "A modern bathroom with a mirror and soft lighting." --shutter_speed_list "[0.1, 0.3, 0.52, 0.7, 0.8]"
-
-# For color temperature 
-python inference_color_temperature.py --config configs/inference_genphoto/adv3_256_384_genphoto_relora_color_temperature.yaml --base_scene "A blue sky with mountains." --color_temperature_list "[5455.0, 5155.0, 5555.0, 6555.0, 7555.0]"
+```bash
+# Always set CUDA_VISIBLE_DEVICES to a free GPU index. With a single visible
+# device, local_rank=0 maps to it; otherwise the script will try cuda:0 and
+# OOM if GPU 0 is already in use.
+CUDA_VISIBLE_DEVICES=1 torchrun --nproc_per_node=1 \
+    train_expression.py --config configs/train_genphoto/expression.yaml
 ```
 
-## Training
-### 1. Prepare Dataset
-* Download the training and validation camera setting dataset (base images for each camera setting) from [Hugging Face](https://huggingface.co/datasets/pandaphd/camera_settings). 
-We perform the physical simulation on-the-fly in `genphoto/data/dataset.py`.
+Pick the GPU index by running `nvidia-smi --query-gpu=index,memory.free --format=csv` first. `torch.distributed.launch` also works but is deprecated in favour of `torchrun`.
 
+Trainable parameters: the expression encoder (the `CameraCameraEncoder` module — name preserved for reuse) + the attention `merge` weights. Image LoRA, motion module, VAE, text encoder, and the SD1.5 UNet are frozen.
 
-* [optional] Using [LLaVA](https://github.com/haotian-liu/LLaVA) or other vision language models to generate a caption for each base image. We already provide our extracted captions in the `annotations/xxxx.json` files
+Sanity-check GIFs of training batches land in `output/expression/<run>/sanity_check/`.
 
+## 5. Inference
 
-### 2. Modify the Training Configuration
-* Modify the training hyperparameter in the training yaml files located in `configs/train_genphoto`,
-you can resume the training from our provided weights
+After training, set `expression_adaptor_ckpt` in `configs/inference_genphoto/expression.yaml` to a saved checkpoint, then:
 
-
-### 3. Training Examples
-
-```python 
-# example for training bokeh rendering
-python -m torch.distributed.launch --nproc_per_node=1 --use_env train_bokehK.py --config configs/train_genphoto/adv3_256_384_genphoto_relora_bokehK.yaml
+```bash
+python inference_expression.py \
+    --config configs/inference_genphoto/expression.yaml \
+    --base_scene "A portrait photograph of a young woman, frontal view, neutral background." \
+    --intensity_list "[0.0, 0.25, 0.5, 0.75, 1.0]"
 ```
 
+The list must have **5 values** (matches the released backbone configuration). Values are smile / AU12 intensity in roughly `[0, 1]`.
 
-## Demo
-We provide the Gradio demo, use following script:
+## 6. Evaluation
 
-```python
-python app.py 
-```
-You can also visit our online [Hugging Face demo](https://huggingface.co/spaces/pandaphd/generative_photography)  
+- **Expression accuracy** — Pearson correlation between detected AU12 trajectory and target intensities:
 
-## Evaluation
+  ```bash
+  python comp_metrics/expression_au_accuracy.py \
+      --gifs-dir inference_output/expression/ \
+      --intensity-list "[0.0, 0.25, 0.5, 0.75, 1.0]"
+  ```
 
-We provide the evaluation metrics code in `comp_metrics/` folder
+- **Frame-to-frame consistency** — reuse the original LPIPS metric (`comp_metrics/consistency_by_LPIPS/comp_LPIPS.py`).
+- **Identity preservation** — recommended add-on: **ArcFace** cosine similarity between the first frame and every other frame in a sequence (not yet implemented; see the plan doc).
+- **Prompt following** — reuse the original CLIP score (`comp_metrics/quality_prompt_following_by_CLIP/clip.py`).
 
+## 7. Open follow-ups
 
-## Some Future Directions for Generative Photography
-Generative Photography is a new research
-domain that requires much more research to be
-further refined. Below are some potential
-future research directions. We welcome 
-researchers to follow up on this work 
-from these perspectives, and we are 
-always open to collaboration.
+These were intentionally left out of the first pass (see [`docs/expression-adaptation-plan.md`](docs/expression-adaptation-plan.md) for the rationale):
 
+- Identity regularizer (ArcFace cosine) added to the training loss.
+- Multi-emotion model (current default filters to `happy` clips).
+- Landmark-displacement (Option C) physical channel as a richer alternative to the scalar broadcast.
+- Gradio demo (the original `app.py` was deleted with the camera scripts; rebuild after a checkpoint exists).
 
-* Support Complex Camera Settings: Currently we only support single camera setting control during generation.
-It is theoretically feasible to simultaneously embed complex camera settings in a
- high-dimensional encoding form. It takes some engineering efforts on the realistic data simulation pipeline as it
- requires a long and dedicated sequence of the real-world
- simulation, such as performing optical simulation (focal
- length and aperture) first, followed by CMOS simulation
- (exposure time and color temperature).
+## Citation
 
+If you build on this fork, please cite the original paper:
 
-* Support Camera Refocused Disparity Bokeh Rendering: The current
-bokeh rendering only supports rendering with the bokeh 
-blur parameter, with the refocused disparity fixed at 0.96
-for all scenes. Dynamic refocused disparity requires the
-generative model to have a better understanding of scene depth.
-
-
-* Wider Camera Setting Spectrum: Currently, due to data rendering and other factors, the supported focal
-length range is 24-70mm. There is a demand for a wider spectrum.
-
-
-* Minimize the Simulation Bias: Simple physics-based rendering is reliable but also introduces certain biases that are inconsistent 
-with the real world, such as the lack of true optical distortions.
-
-
-* Adapt to the DiT Architecture and Larger Resolution: For better quality.
-
-
-* Adapt Generative Photography to Generative Videography
-
-
-
-## Disclaimer
-This project is released for academic use. We disclaim responsibility for user-generated content. Users are solely liable for their actions. The project contributors are not legally affiliated with, nor accountable for, users' behaviors. Use the generative model responsibly, adhering to ethical and legal standards. 
-
-
-## Acknowledgement
-We thank [AnimateDiff](https://github.com/guoyww/AnimateDiff) and [CameraCtrl](https://github.com/hehao13/CameraCtrl) for their amazing jobs.
-
-
-## BibTeX
-If you feel this project helpful/insightful, please cite our paper:
 ```bibtex
 @article{Yuan_2024_GenPhoto,
   title={Generative Photography: Scene-Consistent Camera Control for Realistic Text-to-Image Synthesis},
