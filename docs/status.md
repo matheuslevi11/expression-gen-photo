@@ -130,6 +130,7 @@ inference_expression.py          # inference entry (--seed for reproducible abla
 genphoto/data/expression_dataset.py
 scripts/preprocess_mead.py
 scripts/_validate_dataset_and_model.py            # static validator
+scripts/export_results.sh                         # stage results tarball for scp/rsync pull
 configs/train_genphoto/expression.yaml            # full train (placeholders)
 configs/train_genphoto/expression_smoke.yaml      # verified 5-step smoke
 configs/train_genphoto/expression_validation.yaml # verified production-path validation

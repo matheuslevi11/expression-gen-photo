@@ -34,3 +34,6 @@ Thumbs.db
 # Large media (if generated locally and not meant for the repo)
 # sanity_grid.jpg
 # sanity_grid_v2.jpg
+
+# Export bundles for pulling results to a local machine
+exports/
