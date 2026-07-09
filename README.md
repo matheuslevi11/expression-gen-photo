@@ -4,7 +4,7 @@ This is a **fork-style adaptation** of [Generative Photography (CVPR 2025)](http
 
 The original paper, model weights, and Hugging Face resources are still relevant: the SD1.5 backbone, the merged UNet, the RealEstate10K image LoRA, and the AnimateDiff v3 motion module are all reused **as-is** and frozen during training.
 
-The high-level design rationale is in [`docs/expression-adaptation-plan.md`](docs/expression-adaptation-plan.md).
+The high-level design rationale is in [`docs/plan.md`](docs/plan.md). Current project state, checklists, and the experiment log are in [`docs/status.md`](docs/status.md); full experiment write-ups live in [`docs/experiments/`](docs/experiments/).
 
 ## What changed vs. the original repo
 
@@ -114,7 +114,7 @@ The list must have **5 values** (matches the released backbone configuration). V
 
 ## 7. Open follow-ups
 
-These were intentionally left out of the first pass (see [`docs/expression-adaptation-plan.md`](docs/expression-adaptation-plan.md) for the rationale):
+These were intentionally left out of the first pass (see [`docs/plan.md`](docs/plan.md) for the rationale):
 
 - Identity regularizer (ArcFace cosine) added to the training loss.
 - Multi-emotion model (current default filters to `happy` clips).
