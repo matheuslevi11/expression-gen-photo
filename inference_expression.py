@@ -96,6 +96,12 @@ def load_models(cfg):
     expression_adaptor.requires_grad_(False)
     expression_adaptor.to(device)
 
+    add_temporal = cfg.attention_processor_kwargs.get("add_temporal", True)
+    if not add_temporal and not cfg.attention_processor_kwargs.get("add_spatial", False):
+        logger.info(
+            "Baseline mode: no camera-conditioned attention processors will be installed; "
+            "the expression embedding is computed but ignored by every attention layer."
+        )
     logger.info("Setting the attention processors")
     unet.set_all_attn_processor(
         add_spatial_lora=cfg.lora_ckpt is not None,
@@ -160,6 +166,7 @@ def run_inference(
     height: int = 256,
     width: int = 384,
     prompt_template: str = "<smile intensity: {value:.3f}>",
+    seed: int = 42,
 ):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -173,6 +180,12 @@ def run_inference(
         prompt_template=prompt_template,
     ).load()
     camera_embedding = rearrange(camera_embedding.unsqueeze(0), "b f c h w -> b c f h w")
+
+    # Re-seed immediately before sampling so different model variants (baseline vs.
+    # trained adaptor) draw identical initial noise even though they consume a
+    # different number of RNG draws during module construction.
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     with torch.no_grad():
         sample = pipeline(
@@ -190,8 +203,8 @@ def run_inference(
     logger.info(f"Saved generated sample to {sample_save_path}")
 
 
-def main(config_path: str, base_scene: str, intensity_list: str):
-    torch.manual_seed(42)
+def main(config_path: str, base_scene: str, intensity_list: str, seed: int = 42):
+    torch.manual_seed(seed)
     cfg = OmegaConf.load(config_path)
     logger.info("Loading models...")
     pipeline, device = load_models(cfg)
@@ -204,6 +217,7 @@ def main(config_path: str, base_scene: str, intensity_list: str):
         intensity_list,
         cfg.output_dir,
         device=device,
+        seed=seed,
     )
 
 
@@ -213,5 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--base_scene", type=str, required=True, help="Identity / scene caption")
     parser.add_argument("--intensity_list", type=str, required=True,
                         help="JSON list of 5 smile intensity values, e.g. '[0.0, 0.25, 0.5, 0.75, 1.0]'")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="RNG seed applied at start and re-applied right before sampling")
     args = parser.parse_args()
-    main(args.config, args.base_scene, args.intensity_list)
+    main(args.config, args.base_scene, args.intensity_list, args.seed)

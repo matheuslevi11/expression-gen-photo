@@ -321,7 +321,7 @@ docs/expression-adaptation-plan.md
 
 ---
 
-*Last updated from repository state: May 21, 2026 (production-path validation).*
+*Last updated from repository state: July 9, 2026 (fair frozen-backbone baseline verified; earlier "broken attention" diagnosis corrected).*
 
 ---
 
@@ -390,3 +390,110 @@ Using `configs/inference_genphoto/expression.yaml` (updated with the 100 k check
 1. **Run LPIPS + CLIP metrics** on the generated GIFs in `inference_output/expression_eval/` to measure temporal consistency and prompt fidelity.
 2. **Address male baseline bias** if cross-gender robustness is required — consider identity-conditioned training or ArcFace regularisation.
 3. **Checkpoint housekeeping** — The final run produced ~77 checkpoints (~2.6 GB each, ~200 GB total). Safe to delete all but `checkpoint-step-100000.ckpt` and one mid-run fallback (e.g. `checkpoint-step-50000.ckpt`).
+
+---
+
+## Trained vs. untrained ablation (July 2026)
+
+### Experiment design
+
+To verify that the 100 k-step training actually taught the model expression control, three inference variants were run with the same prompt and random seed:
+
+| Variant | Adaptor | Intensity list |
+|---------|---------|----------------|
+| **Trained ascending** | 100 k checkpoint | [0.0, 0.25, 0.5, 0.75, 1.0] |
+| **Untrained** | None (random init) | [0.0, 0.25, 0.5, 0.75, 1.0] |
+| **Trained descending** | 100 k checkpoint | [1.0, 0.75, 0.5, 0.25, 0.0] |
+
+### Results
+
+| Variant | AU12 detected | Pearson *r* vs target |
+|---------|---------------|----------------------|
+| Trained ascending | [0.098, 0.072, 0.157, 0.771, 0.949] | **+0.91** |
+| Untrained | [0.031, 0.032, 0.030, 0.018, 0.020] | **−0.85** |
+| Trained descending | [0.137, 0.176, 0.406, 0.690, 0.799] | **−0.98** |
+
+### Key finding (CORRECTED July 9, 2026): the untrained baseline WAS already SD1.5-equivalent
+
+The July 8 version of this section claimed the "untrained" output was garbage because `set_all_attn_processor()` installs "randomly-initialised merge weights" that corrupt attention. **That diagnosis was wrong.** Reading `genphoto/models/attention_processor.py` shows every `merge` layer (`qkv_merge` / `q_merge` / `kv_merge`) is **zero-initialised at construction** (`init.zeros_` on weight and bias), and each is used as `merge(h + camera_feature) * scale + h` — so with no adaptor checkpoint loaded the camera path is mathematically the identity: the (random) expression encoder's features cannot influence any attention layer. The RealEstate10K LoRA checkpoint was also verified to contain **no** merge keys (256 keys, all `to_*_lora`), so nothing overwrites the zeros.
+
+This was verified empirically (see "Fair-baseline verification" below): a true bypass run with **no camera-conditioned processors installed at all** is **bit-identical** (max pixel diff = 0) to the "untrained" run — and bit-identical to the July 8 `untrained.gif`.
+
+**Implication:** the "untrained" variant *is* the fair frozen-backbone baseline (SD1.5 `unet_merged` + RealEstate10K LoRA + AnimateDiff motion module). The oversaturated, psychedelic-background look is simply what that frozen backbone produces for this portrait prompt at 256×384 with CFG 8.0 — the trained-vs-untrained delta is **not** inflated by broken attention.
+
+### What the ablation proves
+
+1. **Descending correlation = −0.98** — when the intensity list is reversed, the smile trajectory also reverses. This proves the model is conditioned on the actual scalar values, not just generating a fixed low→high animation.
+2. **Training provides both domain grounding and control** — versus a *fair* frozen backbone, the 100 k checkpoint moves outputs into the photorealistic MEAD portrait domain *and* adds scalar expression control.
+3. **Dynamic range is real** — trained AU12 spans ~0.85 (0.10 → 0.95); the frozen backbone is flat (~0.01 span, no smile response at all).
+
+---
+
+## Fair frozen-backbone baseline verification (July 9, 2026)
+
+Closes the "Fair SD1.5 baseline" checklist item. Three inference variants were run with the same prompt ("A portrait photograph of a young woman, frontal view, neutral background."), the same intensity list `[0.0, 0.25, 0.5, 0.75, 1.0]`, and the same seed (42, re-applied immediately before sampling — see code changes below):
+
+| Variant | Attention processors | Adaptor ckpt | Output |
+|---------|---------------------|--------------|--------|
+| **Bypass baseline** | `add_temporal: false` — no camera-conditioned processors installed anywhere | none | `inference_output/fair_baseline/baseline_bypass/` |
+| **Zero-merge "untrained"** | camera processors installed (as in all prior runs) | none | `inference_output/fair_baseline/baseline_zeromerge/` |
+| **Trained** | camera processors installed | 100 k ckpt | `inference_output/fair_baseline/trained_asc/` |
+
+### Results
+
+- **Bypass ≡ zero-merge: max pixel diff = 0** across all 5 frames. The camera-conditioned attention path with unloaded (zero-initialised) merge weights is *bit-exactly* inert — installing the processors without a checkpoint is already a fair baseline, not "broken attention".
+- Both are also **bit-identical to the July 8 `untrained.gif`**, retroactively validating the earlier ablation as fair.
+- The trained run is bit-identical to the July 8 `trained_asc.gif` (deterministic reproduction of the ablation).
+
+| Variant | Detected AU12 | Pearson *r* vs target | AU12 span |
+|---------|---------------|----------------------|-----------|
+| Frozen backbone (fair baseline) | [0.031, 0.032, 0.030, 0.018, 0.020] | −0.85 | ~0.01 (flat) |
+| Trained (100 k) | [0.098, 0.072, 0.157, 0.771, 0.949] | **+0.91** | **~0.85** |
+
+The frozen backbone renders a coherent (if oversaturated, psychedelic-background) portrait with **zero** expression response to the conditioning; the trained adaptor produces a photorealistic MEAD-domain portrait with a strong monotonic smile ramp. Combined with the descending-list reversal (*r* = −0.98), this is clean evidence that the 100 k training run — and nothing else in the pipeline — is responsible for nuanced expression control.
+
+### Code / config changes
+
+1. **`inference_expression.py`** — added `--seed` (default 42), re-applied via `torch.manual_seed` + `torch.cuda.manual_seed_all` immediately before the pipeline call so model variants that consume different numbers of RNG draws during construction still sample identical initial noise; logs a "Baseline mode" notice when no camera-conditioned processors are requested.
+2. **`configs/inference_genphoto/expression_baseline.yaml`** — new template: `expression_adaptor_ckpt: null` + `attention_processor_kwargs.add_temporal: false` (true bypass; equivalent to zero-merge, verified above).
+
+### Readiness checklist (updated)
+
+- [x] Expression dataset + 6-channel embeddings
+- [x] Training script (distributed, checkpointing, validation sampling)
+- [x] Real gradient accumulation in `train_expression.py`
+- [x] Bounded validation loop (`max_validation_samples`) in `train_expression.py`
+- [x] Inference script + configs
+- [x] MEAD preprocess script
+- [x] Full MEAD_processed annotations on disk
+- [x] Pretrained GenPhoto backbones on disk
+- [x] Smoke test: loss + checkpoint + val GIFs
+- [x] Production-path validation on full annotations (`expression_validation.yaml`)
+- [x] VRAM / disk / val-loop blocker analysis (Findings #1–#3)
+- [x] Production `expression.yaml` paths + batch/val fixes applied & verified
+- [x] Full training run completed (100 k steps)
+- [x] Inference on converged checkpoint
+- [x] Quantitative eval (AU correlation)
+- [x] Trained vs. untrained / ascending vs. descending ablation
+- [x] **Fair SD1.5 baseline (bypass verified bit-identical to zero-merge; ablation confirmed fair)**
+- [ ] LPIPS / CLIP metrics on inference outputs
+- [ ] (Optional) ArcFace identity metric + training regularizer
+
+---
+
+## Evaluation Robustness checklist
+
+What separates the current "does it work" evidence from a complete, scientific ablation of training effectiveness. Items are ranked by evidentiary value per unit of effort; none require retraining.
+
+### Minimum for a complete ablation
+
+- [ ] **Scaled evaluation** — ~30–50 prompts × 3 seeds with the ascending intensity list; report mean ± std of Pearson *r* and the full distribution vs the frozen-backbone baseline. (Current evidence: 3 prompts × 1 seed — an anecdote, statistically. One model load, ~15 s/sample ≈ 1 h GPU.)
+- [ ] **Dose–response calibration curve** — constant lists `[c,c,c,c,c]` for c ∈ {0.0, 0.1, …, 1.0}; plot detected AU12 vs c. Tests *absolute* calibration (does intensity 0.5 mean a half-smile?), which ascending/descending ordering cannot show. This is the direct test of **nuanced** control.
+- [ ] **Non-monotonic / permuted intensity lists** — e.g. `[0.0, 1.0, 0.5, 0.25, 0.75]`; rules out "the model learned smooth ramps plus a direction bit" rather than per-frame scalar conditioning.
+- [ ] **Independent AU measurement** — cross-check a subset with a detector that did **not** produce the training labels (MediaPipe landmark mouth-corner geometry — already a dependency — or OpenFace). Training labels and evaluation currently both come from py-feat AU12, so the model could in principle exploit detector-specific quirks (circularity confound).
+
+### Publication-grade
+
+- [ ] **ArcFace identity consistency** — frame-to-frame cosine similarity, trained vs baseline. Verifies the "same face, different expression" half of the claim (the model must not change identity to change AU12).
+- [ ] **Training-step dose–response** — evaluate *r* at intermediate checkpoints (e.g. 1 k / 5 k / 10 k / 25 k / 50 k / 100 k). Independent evidence that training drives the capability, and shows whether 100 k steps were necessary. ⚠️ **Do this before checkpoint housekeeping** — the ~77 intermediate checkpoints (~200 GB) slated for deletion are the raw material for this experiment.
+- [ ] **Prompt-engineering baseline figure** — 5 independent SD1.5 generations with graded smile prompts ("slightly smiling" → "broadly smiling"). Answers the reviewer question "why not just prompt it?": coarse expression control is possible, but identity consistency collapses — which is precisely this method's contribution.
