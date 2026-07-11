@@ -40,6 +40,7 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 | 2026-07-08 | [trained vs untrained](experiments/2026-07-08-trained-vs-untrained.md) | Reversal test −0.98 proves scalar conditioning. (Original "unfair baseline" diagnosis superseded.) |
 | 2026-07-09 | [fair baseline](experiments/2026-07-09-fair-baseline.md) | Bypass ≡ zero-merge bit-exactly; the ablation baseline was already fair. |
 | 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
+| 2026-07-11 | [related-work comparison](experiments/2026-07-11-related-work-comparison.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are all single-image editing/transfer — our text-to-sequence parametric niche holds; FineFace flagged as closest unexamined competitor. |
 
 ---
 
@@ -65,9 +66,9 @@ What separates the current "does it work" evidence from a complete, scientific a
 ### Minimum for a complete ablation
 
 - [ ] **Scaled evaluation** — ~30–50 prompts × 3 seeds with the ascending intensity list; report mean ± std of Pearson *r* and the full distribution vs the frozen-backbone baseline. (Current evidence: 3 prompts × 1 seed — an anecdote, statistically. One model load, ~15 s/sample ≈ 1 h GPU.)
-- [ ] **Dose–response calibration curve** — constant lists `[c,c,c,c,c]` for c ∈ {0.0, 0.1, …, 1.0}; plot detected AU12 vs c. Tests *absolute* calibration (does intensity 0.5 mean a half-smile?), which ascending/descending ordering cannot show. This is the direct test of **nuanced** control.
+- [ ] **Dose–response calibration curve** — constant lists `[c,c,c,c,c]` for c ∈ {0.0, 0.1, …, 1.0}; plot detected AU12 vs c. Tests *absolute* calibration (does intensity 0.5 mean a half-smile?), which ascending/descending ordering cannot show. This is the direct test of **nuanced** control. Follow PixelSmile's CLS protocol (uniform commanded intensities → Pearson) for comparability, plus MagicFace-style AU MSE for absolute error (see [2026-07-11 study](experiments/2026-07-11-related-work-comparison.md)).
 - [ ] **Non-monotonic / permuted intensity lists** — e.g. `[0.0, 1.0, 0.5, 0.25, 0.75]`; rules out "the model learned smooth ramps plus a direction bit" rather than per-frame scalar conditioning.
-- [ ] **Independent AU measurement** — cross-check a subset with a detector that did **not** produce the training labels (MediaPipe landmark mouth-corner geometry — already a dependency — or OpenFace). Training labels and evaluation currently both come from py-feat AU12, so the model could in principle exploit detector-specific quirks (circularity confound).
+- [ ] **Independent AU measurement** — cross-check a subset with a detector that did **not** produce the training labels. Two ready options from the [2026-07-11 study](experiments/2026-07-11-related-work-comparison.md): **LibreFace** (used by MagicFace for exactly this signal) and **MediaPipe blendshapes** `mouthSmileLeft/Right` (already a dependency; EmojiDiff's Exp metric). Training labels and evaluation currently both come from py-feat AU12, so the model could in principle exploit detector-specific quirks (circularity confound) — notably all three studied papers have the same confound unflagged.
 
 ### Publication-grade
 
