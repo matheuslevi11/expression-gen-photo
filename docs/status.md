@@ -41,6 +41,7 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 | 2026-07-09 | [fair baseline](experiments/2026-07-09-fair-baseline.md) | Bypass ≡ zero-merge bit-exactly; the ablation baseline was already fair. |
 | 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
 | 2026-07-11 | [related-work comparison](experiments/2026-07-11-related-work-comparison.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are all single-image editing/transfer — our text-to-sequence parametric niche holds; FineFace flagged as closest unexamined competitor. |
+| 2026-07-11 | [FineFace study](experiments/2026-07-11-fineface-comparison.md) | Study note (no run): FineFace (Jul 2024) **is prior art** for AU-intensity T2I generation — claim revised to identity-consistent temporal ramps + measured calibration; head-to-head baseline now mandatory. |
 
 ---
 
@@ -75,6 +76,7 @@ What separates the current "does it work" evidence from a complete, scientific a
 - [ ] **ArcFace identity consistency** — frame-to-frame cosine similarity, trained vs baseline. Verifies the "same face, different expression" half of the claim (the model must not change identity to change AU12).
 - [ ] **Training-step dose–response** — evaluate *r* at intermediate checkpoints (e.g. 1 k / 5 k / 10 k / 25 k / 50 k / 100 k). Independent evidence that training drives the capability, and shows whether 100 k steps were necessary. ⚠️ **Do this before checkpoint housekeeping** — the ~77 intermediate checkpoints (~200 GB) slated for deletion are the raw material for this experiment.
 - [ ] **Prompt-engineering baseline figure** — 5 independent SD1.5 generations with graded smile prompts ("slightly smiling" → "broadly smiling"). Answers the reviewer question "why not just prompt it?": coarse expression control is possible, but identity consistency collapses — which is precisely this method's contribution.
+- [ ] **FineFace head-to-head** (⚑ most important external comparison) — run public FineFace (`github.com/tvaranka/fineface`) AU12 sweeps as independent stills vs our ramps, same prompts: (1) AU12 dose–response Pearson *r* (must be measured — they may be competitive), (2) cross-frame ArcFace identity consistency (isolates our core contribution). See [2026-07-11 FineFace study](experiments/2026-07-11-fineface-comparison.md).
 
 ---
 

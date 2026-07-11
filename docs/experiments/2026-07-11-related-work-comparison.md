@@ -1,5 +1,7 @@
 # Related-work study: EmojiDiff, MagicFace, PixelSmile (July 11, 2026)
 
+> **Update (same day):** the follow-up [FineFace study](2026-07-11-fineface-comparison.md) partially supersedes the novelty assessment below. FineFace (arXiv 2407.20175, Jul 2024) **is** prior art for AU-intensity-conditioned text-to-image generation, so "our text-to-sequence parametric niche is intact" holds only in its sequence/temporal-consistency and calibration parts — see the revised claim there. The per-paper analyses below are unaffected.
+
 Study note (no run). Three papers from `related_work/` were read in full and compared against our approach. Bottom line: **all three are single-image expression *editing/transfer* systems; none does text-to-sequence generation with a parametric intensity axis.** Our niche — expression intensity as a first-class *generation* parameter swept across an identity-consistent sequence on a frozen backbone — is intact, but each paper sharpens how we must position and evaluate.
 
 ## The three papers
