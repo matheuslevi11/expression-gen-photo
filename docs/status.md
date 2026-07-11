@@ -39,6 +39,7 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 | 2026-06 | [AU accuracy eval](experiments/2026-06-eval-au-accuracy.md) | Mean Pearson *r* = 0.84 over 3 prompts; male baseline-smile bias noted. |
 | 2026-07-08 | [trained vs untrained](experiments/2026-07-08-trained-vs-untrained.md) | Reversal test −0.98 proves scalar conditioning. (Original "unfair baseline" diagnosis superseded.) |
 | 2026-07-09 | [fair baseline](experiments/2026-07-09-fair-baseline.md) | Bypass ≡ zero-merge bit-exactly; the ablation baseline was already fair. |
+| 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
 
 ---
 
