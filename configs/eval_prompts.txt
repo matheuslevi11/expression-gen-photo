@@ -1,0 +1,44 @@
+# Prompt bank for batch expression evaluation (one prompt per line, # = comment).
+# Kept frontal/neutral-background to isolate expression control; diversity in
+# age, gender, and appearance probes the MEAD-distribution bias found in the
+# 2026-06 eval (male baseline-smile artifact).
+A portrait photograph of a young woman, frontal view, neutral background.
+A portrait photograph of a young man, frontal view, neutral background.
+A portrait photograph of an elderly woman, frontal view, neutral background.
+A portrait photograph of an elderly man, frontal view, neutral background.
+A portrait photograph of a middle-aged woman, frontal view, neutral background.
+A portrait photograph of a middle-aged man, frontal view, neutral background.
+A portrait photograph of a teenage girl, frontal view, neutral background.
+A portrait photograph of a teenage boy, frontal view, neutral background.
+A portrait photograph of a woman with curly hair, frontal view, neutral background.
+A portrait photograph of a man with a beard, frontal view, neutral background.
+A portrait photograph of a woman with freckles, frontal view, neutral background.
+A portrait photograph of a bald man, frontal view, neutral background.
+A portrait photograph of a woman with long black hair, frontal view, neutral background.
+A portrait photograph of a man with short gray hair, frontal view, neutral background.
+A portrait photograph of a young Black woman, frontal view, neutral background.
+A portrait photograph of a young Black man, frontal view, neutral background.
+A portrait photograph of an East Asian woman, frontal view, neutral background.
+A portrait photograph of an East Asian man, frontal view, neutral background.
+A portrait photograph of a South Asian woman, frontal view, neutral background.
+A portrait photograph of a South Asian man, frontal view, neutral background.
+A portrait photograph of a Latina woman, frontal view, neutral background.
+A portrait photograph of a Latino man, frontal view, neutral background.
+A portrait photograph of a Middle Eastern woman, frontal view, neutral background.
+A portrait photograph of a Middle Eastern man, frontal view, neutral background.
+A portrait photograph of a woman in her thirties with a ponytail, frontal view, neutral background.
+A portrait photograph of a man in his forties with stubble, frontal view, neutral background.
+A portrait photograph of a woman in her fifties with short hair, frontal view, neutral background.
+A portrait photograph of a man in his twenties with wavy hair, frontal view, neutral background.
+A portrait photograph of a red-haired woman, frontal view, neutral background.
+A portrait photograph of a blond man, frontal view, neutral background.
+A portrait photograph of a woman with a round face, frontal view, neutral background.
+A portrait photograph of a man with an angular jaw, frontal view, neutral background.
+A portrait photograph of a young woman with dimples, frontal view, neutral background.
+A portrait photograph of an older woman with laugh lines, frontal view, neutral background.
+A portrait photograph of a young man with high cheekbones, frontal view, neutral background.
+A portrait photograph of a woman wearing small earrings, frontal view, neutral background.
+A portrait photograph of a man wearing a plain t-shirt, frontal view, neutral background.
+A portrait photograph of a woman in a white blouse, frontal view, neutral background.
+A portrait photograph of a man in a dark sweater, frontal view, neutral background.
+A portrait photograph of a college student, frontal view, neutral background.

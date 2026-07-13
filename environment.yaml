@@ -43,3 +43,6 @@ dependencies:
     - py-feat==0.6.1
     - Pillow
     - lpips
+    # NOT listed above: facenet-pytorch (identity metric, scripts/batch_eval.py).
+    # Its declared deps pin a newer torch and would move the stack, so install
+    # it manually AFTER env creation:  pip install --no-deps facenet-pytorch==2.6.0

@@ -128,6 +128,21 @@ python comp_metrics/expression_au_accuracy.py \
   --intensity-list "[0.0, 0.25, 0.5, 0.75, 1.0]"
 ```
 
+### Batch evaluation (Evaluation Robustness experiments)
+
+```bash
+# generate → score → summarize; each stage is resumable. Experiments:
+# scaled | calibration | permuted | extrapolation. Repeat with the
+# baseline config for the trained-vs-baseline comparison.
+CUDA_VISIBLE_DEVICES=1 python scripts/batch_eval.py generate \
+  --config <real-path inference yaml> --experiment calibration \
+  --seeds 42,43,44 --out-dir inference_output/batch_eval/trained
+CUDA_VISIBLE_DEVICES=1 python scripts/batch_eval.py score \
+  --manifest inference_output/batch_eval/trained/manifest.jsonl
+python scripts/batch_eval.py summarize \
+  --results inference_output/batch_eval/trained/results.jsonl
+```
+
 ---
 
 ## File map
@@ -139,6 +154,8 @@ genphoto/data/expression_dataset.py
 scripts/preprocess_mead.py
 scripts/_validate_dataset_and_model.py            # static validator
 scripts/export_results.sh                         # stage results tarball for scp/rsync pull
+scripts/batch_eval.py                             # generate/score/summarize eval sweeps
+configs/eval_prompts.txt                          # 40-prompt bank for batch eval
 configs/train_genphoto/expression.yaml            # full train (placeholders)
 configs/train_genphoto/expression_smoke.yaml      # verified 5-step smoke
 configs/train_genphoto/expression_validation.yaml # verified production-path validation
