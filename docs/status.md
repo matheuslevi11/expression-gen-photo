@@ -40,8 +40,7 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 | 2026-07-08 | [trained vs untrained](experiments/2026-07-08-trained-vs-untrained.md) | Reversal test −0.98 proves scalar conditioning. (Original "unfair baseline" diagnosis superseded.) |
 | 2026-07-09 | [fair baseline](experiments/2026-07-09-fair-baseline.md) | Bypass ≡ zero-merge bit-exactly; the ablation baseline was already fair. |
 | 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
-| 2026-07-11 | [related-work comparison](experiments/2026-07-11-related-work-comparison.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are all single-image editing/transfer — our text-to-sequence parametric niche holds; FineFace flagged as closest unexamined competitor. |
-| 2026-07-11 | [FineFace study](experiments/2026-07-11-fineface-comparison.md) | Study note (no run): FineFace (Jul 2024) **is prior art** for AU-intensity T2I generation — claim revised to identity-consistent temporal ramps + measured calibration; head-to-head baseline now mandatory. |
+| 2026-07-11 | [related-work study](experiments/2026-07-11-related-work-study.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are single-image editing/transfer; FineFace (Jul 2024) **is prior art** for AU-intensity T2I generation — claim revised to identity-consistent temporal ramps + measured calibration; head-to-head baseline now mandatory. |
 
 ---
 
@@ -58,25 +57,30 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 - [x] Trained vs. untrained / ascending vs. descending ablation
 - [x] Fair SD1.5 baseline (bypass verified bit-identical to zero-merge)
 - [ ] LPIPS / CLIP metrics on inference outputs
-- [ ] (Optional) ArcFace identity metric + training regularizer
+- [ ] ArcFace identity metric (claim-critical since the [related-work study](experiments/2026-07-11-related-work-study.md) — see Evaluation Robustness)
+- [ ] (Optional) ArcFace identity *training regularizer*
 
 ## Evaluation Robustness checklist
 
-What separates the current "does it work" evidence from a complete, scientific ablation of training effectiveness. Ranked by evidentiary value per unit of effort; none require retraining.
+What separates the current "does it work" evidence from a defensible paper. Re-prioritized 2026-07-11 after the FineFace finding: the revised claim is *identity-consistent, temporally coherent intensity ramps with measured dose–response calibration*, so identity + calibration measurements are now claim-critical, not optional. None require retraining.
 
-### Minimum for a complete ablation
+### Tier 1 — claim-critical (the revised claim rests on these)
+
+- [ ] **ArcFace identity consistency** — frame-to-frame cosine similarity, trained vs baseline (EmojiDiff's Antelopev2-cosine implementation; optionally multi-model averaging à la PixelSmile). Verifies the "same face, different expression" half of the claim — the half FineFace cannot make (no identity metric, independent stills).
+- [ ] **Dose–response calibration curve** — constant lists `[c,c,c,c,c]` for c ∈ {0.0, 0.1, …, 1.0}; plot detected AU12 vs c. The other half of the revised claim — FineFace shows sweeps only qualitatively and admits a nonlinear scale. Follow PixelSmile's CLS protocol (uniform commanded intensities → Pearson) for comparability, plus MagicFace-style AU MSE for absolute error.
+- [ ] **FineFace head-to-head** — run public FineFace (`github.com/tvaranka/fineface`) AU12 sweeps as independent stills vs our ramps, same prompts: (1) AU12 dose–response Pearson *r* (must be measured — they may be competitive), (2) cross-frame ArcFace identity consistency (isolates our core contribution). Depends on the two items above being implemented.
+
+### Tier 2 — minimum for a complete ablation
 
 - [ ] **Scaled evaluation** — ~30–50 prompts × 3 seeds with the ascending intensity list; report mean ± std of Pearson *r* and the full distribution vs the frozen-backbone baseline. (Current evidence: 3 prompts × 1 seed — an anecdote, statistically. One model load, ~15 s/sample ≈ 1 h GPU.)
-- [ ] **Dose–response calibration curve** — constant lists `[c,c,c,c,c]` for c ∈ {0.0, 0.1, …, 1.0}; plot detected AU12 vs c. Tests *absolute* calibration (does intensity 0.5 mean a half-smile?), which ascending/descending ordering cannot show. This is the direct test of **nuanced** control. Follow PixelSmile's CLS protocol (uniform commanded intensities → Pearson) for comparability, plus MagicFace-style AU MSE for absolute error (see [2026-07-11 study](experiments/2026-07-11-related-work-comparison.md)).
 - [ ] **Non-monotonic / permuted intensity lists** — e.g. `[0.0, 1.0, 0.5, 0.25, 0.75]`; rules out "the model learned smooth ramps plus a direction bit" rather than per-frame scalar conditioning.
-- [ ] **Independent AU measurement** — cross-check a subset with a detector that did **not** produce the training labels. Two ready options from the [2026-07-11 study](experiments/2026-07-11-related-work-comparison.md): **LibreFace** (used by MagicFace for exactly this signal) and **MediaPipe blendshapes** `mouthSmileLeft/Right` (already a dependency; EmojiDiff's Exp metric). Training labels and evaluation currently both come from py-feat AU12, so the model could in principle exploit detector-specific quirks (circularity confound) — notably all three studied papers have the same confound unflagged.
+- [ ] **Independent AU measurement** — cross-check a subset with a detector that did **not** produce the training labels: **LibreFace** (used by MagicFace for exactly this signal) or **MediaPipe blendshapes** `mouthSmileLeft/Right` (already a dependency; EmojiDiff's Exp metric). Breaks the py-feat label/eval circularity — which all four studied papers share unflagged — and pre-empts EmojiDiff's detector-dependency critique.
 
-### Publication-grade
+### Tier 3 — supporting evidence
 
-- [ ] **ArcFace identity consistency** — frame-to-frame cosine similarity, trained vs baseline. Verifies the "same face, different expression" half of the claim (the model must not change identity to change AU12).
-- [ ] **Training-step dose–response** — evaluate *r* at intermediate checkpoints (e.g. 1 k / 5 k / 10 k / 25 k / 50 k / 100 k). Independent evidence that training drives the capability, and shows whether 100 k steps were necessary. ⚠️ **Do this before checkpoint housekeeping** — the ~77 intermediate checkpoints (~200 GB) slated for deletion are the raw material for this experiment.
-- [ ] **Prompt-engineering baseline figure** — 5 independent SD1.5 generations with graded smile prompts ("slightly smiling" → "broadly smiling"). Answers the reviewer question "why not just prompt it?": coarse expression control is possible, but identity consistency collapses — which is precisely this method's contribution.
-- [ ] **FineFace head-to-head** (⚑ most important external comparison) — run public FineFace (`github.com/tvaranka/fineface`) AU12 sweeps as independent stills vs our ramps, same prompts: (1) AU12 dose–response Pearson *r* (must be measured — they may be competitive), (2) cross-frame ArcFace identity consistency (isolates our core contribution). See [2026-07-11 FineFace study](experiments/2026-07-11-fineface-comparison.md).
+- [ ] **Training-step dose–response** — evaluate *r* at intermediate checkpoints (e.g. 1 k / 5 k / 10 k / 25 k / 50 k / 100 k). Independent evidence that training drives the capability. ⚠️ **Do this before checkpoint housekeeping** — the ~100 intermediate checkpoints (~245 GB) slated for deletion are the raw material.
+- [ ] **Prompt-engineering baseline figure** — 5 independent SD1.5 generations with graded smile prompts. Now doubly motivated: PixelSmile's zero-shot row (CLS-6 0.69 untrained) proves "just prompt it" is a real objection; expected result is coarse control with collapsed identity.
+- [ ] **Out-of-range intensity probe** — intensities < 0 and > 1 (FineFace's Fig. 8 extrapolation demo); cheap disentanglement evidence.
 
 ---
 
