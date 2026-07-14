@@ -12,7 +12,7 @@ The fork replaces GenPhoto's camera axis with **scalar facial-expression (smile 
 
 **Current state:** trained to 100 k steps on one RTX 3090; final checkpoint at
 `output/expression/expression-2026-05-26T21-43-56/checkpoints/checkpoint-step-100000.ckpt`.
-Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending reversal (+0.91 / −0.98) proves true scalar conditioning; a verified-fair frozen-backbone baseline shows zero expression response without training. Remaining work is evaluation robustness (below), not engineering.
+Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21** (40 prompts × 3 seeds), confirmed by a label-independent MediaPipe detector (**0.83**); frame-to-frame identity cosine **0.92** (baseline 0.85, and undetectable on 57% of baseline samples); descending reversal −0.98. **No absolute intensity calibration** (constant-list CLS = 0.07) — control is *relative/ordinal*, a consequence of ramp-only MEAD training; permuted lists partial (r = 0.38). Claim accordingly: identity-consistent, temporally coherent expression ramps with measured (and honestly reported) calibration limits.
 
 | Area | Original GenPhoto | This fork |
 |------|-------------------|-----------|
@@ -41,6 +41,7 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 | 2026-07-09 | [fair baseline](experiments/2026-07-09-fair-baseline.md) | Bypass ≡ zero-merge bit-exactly; the ablation baseline was already fair. |
 | 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
 | 2026-07-11 | [related-work study](experiments/2026-07-11-related-work-study.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are single-image editing/transfer; FineFace (Jul 2024) **is prior art** for AU-intensity T2I generation — claim revised to identity-consistent temporal ramps + measured calibration; head-to-head baseline now mandatory. |
+| 2026-07-14 | [Tier 1+2 batch eval](experiments/2026-07-14-tier12-batch-eval.md) | 540+120 samples: ramp control robust (r=0.77±0.21, n=120; MediaPipe confirms 0.83), identity 0.92 vs baseline; **no absolute calibration** (constant-list CLS=0.07, flat ~0.85) — control is relative/contextual; permuted lists partial (0.38). |
 
 ---
 
@@ -57,7 +58,7 @@ Mean AU12-vs-target Pearson *r* = **0.84** over 3 prompts; ascending/descending 
 - [x] Trained vs. untrained / ascending vs. descending ablation
 - [x] Fair SD1.5 baseline (bypass verified bit-identical to zero-merge)
 - [ ] LPIPS / CLIP metrics on inference outputs
-- [ ] ArcFace identity metric (claim-critical since the [related-work study](experiments/2026-07-11-related-work-study.md) — see Evaluation Robustness)
+- [x] Identity metric (facenet-VGGFace2 frame-to-frame cosine, 2026-07-14; add insightface/ArcFace for multi-model averaging before publication)
 - [ ] (Optional) ArcFace identity *training regularizer*
 
 ## Evaluation Robustness checklist
@@ -66,15 +67,15 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 
 ### Tier 1 — claim-critical (the revised claim rests on these)
 
-- [ ] **ArcFace identity consistency** — frame-to-frame cosine similarity, trained vs baseline (EmojiDiff's Antelopev2-cosine implementation; optionally multi-model averaging à la PixelSmile). Verifies the "same face, different expression" half of the claim — the half FineFace cannot make (no identity metric, independent stills).
-- [ ] **Dose–response calibration curve** — constant lists `[c,c,c,c,c]` for c ∈ {0.0, 0.1, …, 1.0}; plot detected AU12 vs c. The other half of the revised claim — FineFace shows sweeps only qualitatively and admits a nonlinear scale. Follow PixelSmile's CLS protocol (uniform commanded intensities → Pearson) for comparability, plus MagicFace-style AU MSE for absolute error.
-- [ ] **FineFace head-to-head** — run public FineFace (`github.com/tvaranka/fineface`) AU12 sweeps as independent stills vs our ramps, same prompts: (1) AU12 dose–response Pearson *r* (must be measured — they may be competitive), (2) cross-frame ArcFace identity consistency (isolates our core contribution). Depends on the two items above being implemented.
+- [x] **Identity consistency** (2026-07-14) — facenet-VGGFace2 frame-to-frame cosine: trained **0.92 ± 0.05** vs baseline 0.85 (baseline faces undetectable on 57% of samples). Pre-publication: add insightface/ArcFace for multi-model averaging.
+- [x] **Dose–response calibration curve** (2026-07-14) — **NEGATIVE: no absolute calibration.** Constant-list CLS = 0.07; detected AU12 flat at ~0.85 for every commanded level ≥ 0.1. Control is *relative/contextual* (same commanded 0.0 → 0.54 inside a ramp, 0.79 in a constant clip). Root cause: ramp-only MEAD training. Report as measured limitation; see fix directions in the experiment note.
+- [ ] **FineFace head-to-head** — run public FineFace (`github.com/tvaranka/fineface`) AU12 sweeps as independent stills vs our ramps, same prompts: (1) ramp-following Pearson *r*, (2) cross-frame identity consistency, (3) **constant-intensity CLS** — static-trained FineFace may calibrate better absolutely while losing identity/trajectory coherence; measure both directions honestly.
 
 ### Tier 2 — minimum for a complete ablation
 
-- [ ] **Scaled evaluation** — ~30–50 prompts × 3 seeds with the ascending intensity list; report mean ± std of Pearson *r* and the full distribution vs the frozen-backbone baseline. (Current evidence: 3 prompts × 1 seed — an anecdote, statistically. One model load, ~15 s/sample ≈ 1 h GPU.)
-- [ ] **Non-monotonic / permuted intensity lists** — e.g. `[0.0, 1.0, 0.5, 0.25, 0.75]`; rules out "the model learned smooth ramps plus a direction bit" rather than per-frame scalar conditioning.
-- [ ] **Independent AU measurement** — cross-check a subset with a detector that did **not** produce the training labels: **LibreFace** (used by MagicFace for exactly this signal) or **MediaPipe blendshapes** `mouthSmileLeft/Right` (already a dependency; EmojiDiff's Exp metric). Breaks the py-feat label/eval circularity — which all four studied papers share unflagged — and pre-empts EmojiDiff's detector-dependency critique.
+- [x] **Scaled evaluation** (2026-07-14) — 40 prompts × 3 seeds: r = **0.774 ± 0.212** (median 0.86, 87% > 0.5) vs baseline −0.05 ± 0.64. Gender gap quantified: female 0.83 vs male 0.71.
+- [x] **Non-monotonic / permuted intensity lists** (2026-07-14) — r = **0.385 ± 0.505**: real per-frame conditioning, but much weaker than monotonic ramps — the temporal prior resists non-monotonic trajectories (no training support).
+- [x] **Independent AU measurement** (2026-07-14) — MediaPipe mouth-corner proxy confirms ramp control at r = **0.829 ± 0.230** (n=120), breaking the py-feat label/eval circularity that all four studied papers share unflagged.
 
 ### Tier 3 — supporting evidence
 
@@ -87,7 +88,8 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 ## Known limitations (affect result quality, not correctness)
 
 - **MEAD happy clips** often have high AU12 even at lower labeled intensity levels; the dataset uses sorted-frame ramps and, for validation, decouples fixed `intensity_list` targets from which pixels are shown.
-- **Male baseline-smile bias** — high AU12 at intensity 0.0 for the "young man" prompt; likely a MEAD distribution artifact. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required.
+- **No absolute intensity calibration** — commanded values are rendered *relative to the clip's trajectory*, not as absolute AU12 targets (constant-list CLS = 0.07, flat ~0.85 plateau). Consequence of ramp-only MEAD training; fix candidates: constant/permuted-list training augmentation, AU dropout + expression-CFG, label distribution smoothing (see 2026-07-14 note).
+- **Male baseline-smile bias** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female), Δ ≈ 0.11; a MEAD distribution artifact. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required.
 - **Option A embedding only** — scalar broadcast + CCL; no landmark flow or multi-AU control yet.
 - **Single emotion filter** — default `happy` only; multi-emotion is a follow-up.
 - **No identity regularizer** in the loss (ArcFace).
