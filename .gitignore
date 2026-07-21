@@ -37,3 +37,6 @@ Thumbs.db
 
 # Export bundles for pulling results to a local machine
 exports/
+
+# Vendored competitor forks (each has its own git repo; see docs/experiments)
+forks/

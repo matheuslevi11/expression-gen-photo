@@ -42,6 +42,7 @@ Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21
 | 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
 | 2026-07-11 | [related-work study](experiments/2026-07-11-related-work-study.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are single-image editing/transfer; FineFace (Jul 2024) **is prior art** for AU-intensity T2I generation — claim revised to identity-consistent temporal ramps + measured calibration; head-to-head baseline now mandatory. |
 | 2026-07-14 | [Tier 1+2 batch eval](experiments/2026-07-14-tier12-batch-eval.md) | 540+120 samples: ramp control robust (r=0.77±0.21, n=120; MediaPipe confirms 0.83), identity 0.92 vs baseline; **no absolute calibration** (constant-list CLS=0.07, flat ~0.85) — control is relative/contextual; permuted lists partial (0.38). |
+| 2026-07-21 | [FineFace setup](experiments/2026-07-21-fineface-setup.md) | Setup note: FineFace runs in an isolated env; SD2.1-base was pulled from HF, fixed via a sha256-verified mirror. Verified AU12 sweep works — identity visibly drifts across independent stills (the weakness our ramps avoid). |
 
 ---
 
@@ -69,7 +70,7 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 
 - [x] **Identity consistency** (2026-07-14) — facenet-VGGFace2 frame-to-frame cosine: trained **0.92 ± 0.05** vs baseline 0.85 (baseline faces undetectable on 57% of samples). Pre-publication: add insightface/ArcFace for multi-model averaging.
 - [x] **Dose–response calibration curve** (2026-07-14) — **NEGATIVE: no absolute calibration.** Constant-list CLS = 0.07; detected AU12 flat at ~0.85 for every commanded level ≥ 0.1. Control is *relative/contextual* (same commanded 0.0 → 0.54 inside a ramp, 0.79 in a constant clip). Root cause: ramp-only MEAD training. Report as measured limitation; see fix directions in the experiment note.
-- [ ] **FineFace head-to-head** — run public FineFace (`github.com/tvaranka/fineface`) AU12 sweeps as independent stills vs our ramps, same prompts: (1) ramp-following Pearson *r*, (2) cross-frame identity consistency, (3) **constant-intensity CLS** — static-trained FineFace may calibrate better absolutely while losing identity/trajectory coherence; measure both directions honestly.
+- [ ] **FineFace head-to-head** — FineFace now runs (env + mirror backbone set up 2026-07-21; `forks/fineface/`). Remaining: generate AU12 sweeps over `configs/eval_prompts.txt`, score via `batch_eval.py score` on a manifest with `"frames"` entries, compare (1) ramp-following Pearson *r*, (2) cross-frame identity consistency, (3) **constant-intensity CLS** — static-trained FineFace may calibrate better absolutely while losing identity/trajectory coherence; measure both directions honestly.
 
 ### Tier 2 — minimum for a complete ablation
 
