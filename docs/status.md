@@ -12,7 +12,9 @@ The fork replaces GenPhoto's camera axis with **scalar facial-expression (smile 
 
 **Current state:** trained to 100 k steps on one RTX 3090; final checkpoint at
 `output/expression/expression-2026-05-26T21-43-56/checkpoints/checkpoint-step-100000.ckpt`.
-Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21** (40 prompts × 3 seeds), confirmed by a label-independent MediaPipe detector (**0.83**); frame-to-frame identity cosine **0.92** (baseline 0.85, and undetectable on 57% of baseline samples); descending reversal −0.98. **No absolute intensity calibration** (constant-list CLS = 0.07) — control is *relative/ordinal*, a consequence of ramp-only MEAD training; permuted lists partial (r = 0.38). Claim accordingly: identity-consistent, temporally coherent expression ramps with measured (and honestly reported) calibration limits.
+Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21** (40 prompts × 3 seeds), confirmed by a label-independent MediaPipe detector (**0.83**); frame-to-frame identity cosine **0.92** (frozen baseline 0.85, undetectable on 57% of its samples); descending reversal −0.98. **No absolute intensity calibration** (constant-list CLS = 0.07) — control is *relative/ordinal*, a consequence of ramp-only MEAD training; permuted lists partial (r = 0.38).
+
+**FineFace head-to-head (2026-07-21, closest prior art, n=120 matched):** ramp-following is a **tie** (FineFace marginally ahead), FineFace **beats us on absolute calibration** (CLS 0.50 vs 0.07), and we **win cross-frame identity** modestly (worst-case +0.12). Net: the defensible contribution is the **sequence-native formulation** (one identity-consistent clip vs independent per-still generation), *not* better or better-calibrated expression control. Claim/position accordingly.
 
 | Area | Original GenPhoto | This fork |
 |------|-------------------|-----------|
@@ -42,7 +44,7 @@ Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21
 | 2026-07-09 | [StyleGAN data note](experiments/2026-07-09-stylegan-data-note.md) | Design note (no run): StyleGAN as identity-paired ramp generator; calibration must be measured, not prescribed. |
 | 2026-07-11 | [related-work study](experiments/2026-07-11-related-work-study.md) | Study note (no run): EmojiDiff / MagicFace / PixelSmile are single-image editing/transfer; FineFace (Jul 2024) **is prior art** for AU-intensity T2I generation — claim revised to identity-consistent temporal ramps + measured calibration; head-to-head baseline now mandatory. |
 | 2026-07-14 | [Tier 1+2 batch eval](experiments/2026-07-14-tier12-batch-eval.md) | 540+120 samples: ramp control robust (r=0.77±0.21, n=120; MediaPipe confirms 0.83), identity 0.92 vs baseline; **no absolute calibration** (constant-list CLS=0.07, flat ~0.85) — control is relative/contextual; permuted lists partial (0.38). |
-| 2026-07-21 | [FineFace setup](experiments/2026-07-21-fineface-setup.md) | Setup note: FineFace runs in an isolated env; SD2.1-base was pulled from HF, fixed via a sha256-verified mirror. Verified AU12 sweep works — identity visibly drifts across independent stills (the weakness our ramps avoid). |
+| 2026-07-21 | [FineFace head-to-head](experiments/2026-07-21-fineface-headtohead.md) | Tier-1 comparison (n=120 matched): ramp-following **tie** (r 0.79 ff / 0.77 ours); FineFace **wins calibration** (CLS 0.50 vs 0.07); we **win identity** modestly (min-adjacent +0.12, 68% of prompts). Contribution narrows to the sequence-native temporal formulation. |
 
 ---
 
@@ -70,7 +72,7 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 
 - [x] **Identity consistency** (2026-07-14) — facenet-VGGFace2 frame-to-frame cosine: trained **0.92 ± 0.05** vs baseline 0.85 (baseline faces undetectable on 57% of samples). Pre-publication: add insightface/ArcFace for multi-model averaging.
 - [x] **Dose–response calibration curve** (2026-07-14) — **NEGATIVE: no absolute calibration.** Constant-list CLS = 0.07; detected AU12 flat at ~0.85 for every commanded level ≥ 0.1. Control is *relative/contextual* (same commanded 0.0 → 0.54 inside a ramp, 0.79 in a constant clip). Root cause: ramp-only MEAD training. Report as measured limitation; see fix directions in the experiment note.
-- [ ] **FineFace head-to-head** — FineFace now runs (env + mirror backbone set up 2026-07-21; `forks/fineface/`). Remaining: generate AU12 sweeps over `configs/eval_prompts.txt`, score via `batch_eval.py score` on a manifest with `"frames"` entries, compare (1) ramp-following Pearson *r*, (2) cross-frame identity consistency, (3) **constant-intensity CLS** — static-trained FineFace may calibrate better absolutely while losing identity/trajectory coherence; measure both directions honestly.
+- [x] **FineFace head-to-head** (2026-07-21, n=120 matched) — ramp-following a **tie** (AU12 r 0.786 ff / 0.774 ours; FineFace ahead on MediaPipe 0.88/0.83); FineFace **wins absolute calibration** (CLS 0.50 vs 0.07); we **win cross-frame identity** modestly (adjacent-min cosine +0.12, 63–68% of prompts, ~2.5× lower variance). Our male-bias is data-specific (FineFace has the opposite gender skew). Contribution = sequence-native temporal formulation, not superior control.
 
 ### Tier 2 — minimum for a complete ablation
 
@@ -89,8 +91,9 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 ## Known limitations (affect result quality, not correctness)
 
 - **MEAD happy clips** often have high AU12 even at lower labeled intensity levels; the dataset uses sorted-frame ramps and, for validation, decouples fixed `intensity_list` targets from which pixels are shown.
-- **No absolute intensity calibration** — commanded values are rendered *relative to the clip's trajectory*, not as absolute AU12 targets (constant-list CLS = 0.07, flat ~0.85 plateau). Consequence of ramp-only MEAD training; fix candidates: constant/permuted-list training augmentation, AU dropout + expression-CFG, label distribution smoothing (see 2026-07-14 note).
-- **Male baseline-smile bias** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female), Δ ≈ 0.11; a MEAD distribution artifact. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required.
+- **No absolute intensity calibration** — commanded values are rendered *relative to the clip's trajectory*, not as absolute AU12 targets (constant-list CLS = 0.07, flat ~0.85 plateau). FineFace (prior art) reaches CLS 0.50 on the same protocol, so this is a genuine deficit vs the field, not just an unmeasured axis. Consequence of ramp-only MEAD training; fix candidates: constant/permuted-list training augmentation, AU dropout + expression-CFG, label distribution smoothing (see 2026-07-14, 2026-07-21 notes).
+- **Ramp-following is on par with, not better than, prior art** — matched-prompt AU12 r ties FineFace (0.77 vs 0.79). The contribution is the sequence-native temporal formulation + modestly better cross-frame identity, not superior control.
+- **Male baseline-smile bias (data-specific)** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female). FineFace shows the *opposite* skew (male 0.82 > female 0.77), localizing the bias to the MEAD-happy training distribution rather than AU-conditioned generation generally. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required.
 - **Option A embedding only** — scalar broadcast + CCL; no landmark flow or multi-AU control yet.
 - **Single emotion filter** — default `happy` only; multi-emotion is a follow-up.
 - **No identity regularizer** in the loss (ArcFace).
