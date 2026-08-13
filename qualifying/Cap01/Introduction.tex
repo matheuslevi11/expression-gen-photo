@@ -57,11 +57,31 @@
 % Keep to two or three. Each must be answerable by an experiment in Cap05
 % or by the planned work in Cap06.
 
-\noindent\textbf{RQ1}: \todo[inline]{e.g. Can expression intensity be controlled as a per-frame sequence parameter on a frozen text-to-video backbone, such that the detected intensity follows the commanded trajectory?}
+\noindent\textbf{Task formulation.} Let a \emph{clip} denote a sequence of $F$ frames
+that share one identity and scene. Given a text prompt and a per-frame intensity
+trajectory $(s_1,\dots,s_F)$ with each $s_t \in [0,1]$, the objective is to generate a
+single clip in which the detected intensity of the lip-corner-puller action unit (AU12,
+a common smile proxy) in frame $t$ tracks $s_t$. Prior conditional-generation methods
+instead render each intensity level as an independent image. The three research questions
+below ask, in turn, whether this trajectory-following is achievable on a frozen
+\gls{t2v} backbone (RQ1), whether generating the trajectory jointly as one sequence
+benefits cross-level identity (RQ2), and whether the resulting control is absolute or
+relative to the commanded trajectory (RQ3). This formulation is restated and made precise
+in Chapter~\ref{cap:method}, Section~\ref{sec:method-overview}.
 
-\noindent\textbf{RQ2}: \todo[inline]{e.g. Does generating the intensity levels as one sequence, rather than as independent stills, improve identity consistency across levels?}
+\medskip
+\noindent\textbf{RQ1}: Can a scalar expression-intensity axis be injected into a frozen
+\gls{t2v} backbone by the same conditioning mechanism that \citet{yuan2024genphoto} apply
+to camera parameters, such that the detected AU12 intensity follows a commanded per-frame
+trajectory?
 
-\noindent\textbf{RQ3}: \todo[inline]{e.g. Is the resulting control absolute (calibrated to AU intensity units) or only relative/ordinal, and what causes the difference?}
+\noindent\textbf{RQ2}: Does generating the intensity levels jointly, as a single
+sequence, preserve identity across levels better than generating each level as an
+independent still?
+
+\noindent\textbf{RQ3}: Is the resulting control absolute, so that a commanded value maps
+to a fixed detected intensity, or is it relative to the commanded trajectory, and what
+property of the training data determines which?
 
 % =====================================================================
 \section{Objectives}\label{sec:objectives}
@@ -89,9 +109,20 @@
 % stronger than quietly deleting it. Discuss the framing with the advisor.
 
 \begin{itemize}
-    \item \textbf{H1}: \todo[inline]{Sequence-level conditioning yields detected intensity that correlates with the commanded trajectory.}
-    \item \textbf{H2}: \todo[inline]{Temporal attention preserves identity across intensity levels better than independent per-level generation.}
-    \item \textbf{H3}: \todo[inline]{Control is absolute, i.e. a commanded value maps to the same detected intensity regardless of context. NOTE: refuted by the calibration experiment; see Cap05.}
+    \item \textbf{H1}: Per-frame scalar conditioning on a frozen backbone yields a
+    detected intensity that follows the commanded trajectory. \emph{Supported}
+    (Chapter~\ref{cap:preliminary-results}, Section~\ref{sec:res-ramp}): the effect is
+    confirmed by an estimator that produced none of the training labels, and it
+    strengthens monotonically with training.
+    \item \textbf{H2}: Joint sequence generation preserves identity across intensity
+    levels better than independent per-level generation. \emph{Supported, modestly}
+    (Section~\ref{sec:res-headtohead}): a consistent but small advantage in the
+    worst-case adjacent-frame identity, on a majority of prompts.
+    \item \textbf{H3}: The control is absolute, that is, a commanded value maps to the
+    same detected intensity regardless of the surrounding trajectory. \emph{Refuted}
+    (Section~\ref{sec:res-calibration}): the same commanded value renders at different
+    detected intensities depending on the trajectory in which it appears. The cause is
+    traced to ramp-only video supervision, which is precisely what makes RQ3 worth asking.
 \end{itemize}
 
 % =====================================================================
@@ -108,7 +139,27 @@
 % has primacy. Also avoid "fine-grained" as a headline term, since three of
 % the four related papers use it with different meanings.
 
-\todo[inline]{List 3--4 contributions, each phrased so that Cap05 or Cap06 demonstrably delivers it.}
+\noindent This work makes three contributions.
+
+\begin{itemize}
+    \item \textbf{C1 (Formulation).} Expression intensity is cast as a \emph{sequence-level}
+    generation parameter: one text prompt and one per-frame trajectory yield a single
+    identity-consistent clip, whereas the closest prior art \citep{varanka2024fineface}
+    produces $N$ independent stills bound only by a shared random seed. Delivered by the
+    method overview and conditioning design (Sections~\ref{sec:method-overview}
+    and~\ref{sec:method-conditioning}) and evaluated in the head-to-head comparison
+    (Section~\ref{sec:res-headtohead}).
+    \item \textbf{C2 (Evaluation protocol).} A protocol that separates three axes commonly
+    conflated, namely trajectory-following, absolute calibration, and cross-frame
+    identity, and that guards the label/evaluation circularity shared by the closest works
+    by scoring with an estimator that produced no training labels. Delivered by
+    Section~\ref{sec:method-evaluation} and applied across
+    Sections~\ref{sec:res-ramp}--\ref{sec:res-headtohead}.
+    \item \textbf{C3 (Empirical characterization).} A quantified commanded-versus-detected
+    dose--response, which the closest prior art reports only qualitatively, including the
+    negative finding that ramp-only video supervision yields relative rather than absolute
+    control. Delivered by Section~\ref{sec:res-calibration}.
+\end{itemize}
 
 % =====================================================================
 \section{Document Organization}\label{sec:organization}
