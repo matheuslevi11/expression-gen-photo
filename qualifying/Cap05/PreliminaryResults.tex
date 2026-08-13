@@ -1,0 +1,165 @@
+\chapter{Preliminary Results}\label{cap:preliminary-results}
+\glsresetall
+
+% =====================================================================
+% SKELETON. Target: 10--14 pages.
+%
+% The tables below are PRE-FILLED from docs/status.md as of 2026-08-06, with
+% the originating lab note given in each caption. Cross-check every number
+% against its dated entry in docs/experiments/ before submitting; those files
+% are append-only and authoritative, docs/status.md is a living summary.
+%
+% Reporting principle for this chapter: the negative calibration result and
+% the tie with the prior art are REPORTED, not softened. They are what make
+% the contribution claim in Chapter~\ref{cap:introduction} defensible, and a
+% banca that finds them by asking will trust the rest of the document less.
+% =====================================================================
+
+\todo[inline]{Opening paragraph: what has been measured so far and what each measurement establishes.}
+
+% =====================================================================
+\section{Experimental Setup}\label{sec:res-setup}
+
+% Checkpoint (100k steps, single RTX 3090), prompt bank size, seeds,
+% frames per clip, intensity lists used. Point to the batch-eval harness so
+% the numbers are reproducible.
+
+\todo[inline]{Checkpoint, prompt bank, seeds, clip length, and the evaluation harness.}
+
+% =====================================================================
+\section{Trajectory Following}\label{sec:res-ramp}
+
+% Headline: control over the trajectory is real and robust at scale, and it
+% is confirmed by an estimator that produced none of the training labels.
+% The descending-ramp reversal near -1 is strong evidence that the model
+% responds to the conditioning signal rather than to a fixed temporal prior.
+
+\begin{table}[H]
+    \centering
+    \caption{Trajectory following, measured as Pearson correlation between commanded and detected AU12 intensity. Scaled evaluation over 40 prompts $\times$ 3 seeds ($n=120$).}
+    \label{tab:res-ramp}
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        Condition & py-feat AU12 $r$ & MediaPipe proxy $r$ \\
+        \midrule
+        Trained adaptor, ascending ramp  & $0.774 \pm 0.212$ & $0.829 \pm 0.230$ \\
+        Frozen backbone baseline         & $-0.05 \pm 0.64$  & \TBD \\
+        Trained adaptor, descending ramp & $-0.98$           & \TBD \\
+        Trained adaptor, permuted list   & $0.385 \pm 0.505$ & \TBD \\
+        \bottomrule
+    \end{tabular}\\[4pt]
+    {\footnotesize Source: prepared by the author. Lab notes 2026-07-08 and 2026-07-14.}
+\end{table}
+
+\todo[inline]{Discuss: median 0.86, 87\% of samples above 0.5, and what the permuted-list drop says about the temporal prior.}
+
+% Interpretation point worth making explicitly: the permuted-list result
+% (0.385) shows the conditioning is genuinely per-frame, but that the
+% temporal prior resists non-monotonic trajectories, for which the training
+% data contains no support. This is a scope statement, not a failure.
+
+% =====================================================================
+\section{Identity Consistency}\label{sec:res-identity}
+
+% The measurement that isolates the sequence-native claim. Note the
+% qualitative asymmetry that matters as much as the number: the baseline's
+% faces were undetectable in 57% of samples, so its 0.85 is computed on the
+% easier remainder and flatters it.
+
+\begin{table}[H]
+    \centering
+    \caption{Frame-to-frame face-embedding cosine similarity within a generated clip.}
+    \label{tab:res-identity}
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        Condition & Mean cosine & Face detected \\
+        \midrule
+        Trained adaptor          & $0.92 \pm 0.05$ & \TBD \\
+        Frozen backbone baseline & $0.85$          & 43\% of samples \\
+        \bottomrule
+    \end{tabular}\\[4pt]
+    {\footnotesize Source: prepared by the author. Lab note 2026-07-14, facenet-VGGFace2 embeddings.}
+\end{table}
+
+\todo[inline]{Report the adjacent-frame minimum alongside the mean, and note that multi-model averaging is pending (Cap06).}
+
+% =====================================================================
+\section{Absolute Calibration}\label{sec:res-calibration}
+
+% NEGATIVE RESULT. Report it plainly and diagnose it.
+%
+% Finding: holding the commanded value constant across a clip and varying it
+% between clips produces almost no change in detected intensity
+% (\gls{cls} = 0.07; detected AU12 flat near 0.85 for every commanded level
+% at or above 0.1). The same commanded value of 0.0 renders as 0.54 inside a
+% ramp and 0.79 in a constant clip.
+%
+% Consequence: the control is RELATIVE and contextual, not absolute. The
+% conditioning commands a trajectory, not a value.
+%
+% Root cause: the training clips are onset-to-apex ramps only
+% (Section~\ref{sec:method-data}), so the model never observed a constant
+% intensity trajectory.
+%
+% This refutes H3 from Section~\ref{sec:hypotheses}. Say so in those words.
+
+\todo[inline]{Report the calibration result, state that H3 is refuted, and give the ramp-only diagnosis.}
+
+\todo[inline]{Add the fix directions as PROPOSED work, not as claims: constant/permuted-list training augmentation, AU dropout with expression-CFG \citep{wei2025magicface}, label distribution smoothing \citep{varanka2024fineface}. Schedule in Cap06.}
+
+% =====================================================================
+\section{Comparison with the Closest Prior Art}\label{sec:res-headtohead}
+
+% The single most important external comparison in the proposal
+% (lab note 2026-07-21, n=120 matched prompts). The verdict is mixed and
+% must be presented as mixed.
+
+\begin{table}[H]
+    \centering
+    \caption{Head-to-head against \citet{varanka2024fineface} under matched prompts and intensity levels ($n=120$). Higher is better in every column.}
+    \label{tab:res-headtohead}
+    \begin{tabular}{@{}lccc@{}}
+        \toprule
+        System & Ramp $r$ (py-feat) & Calibration (\gls{cls}) & Identity (adjacent min.) \\
+        \midrule
+        FineFace, independent stills & $0.786$ & $0.50$ & baseline \\
+        This work, one clip          & $0.774$ & $0.07$ & $+0.12$ \\
+        \bottomrule
+    \end{tabular}\\[4pt]
+    {\footnotesize Source: prepared by the author. Lab note 2026-07-21.}
+\end{table}
+
+% Read the table out loud in the text, in this order:
+%   1. Ramp following is a TIE (FineFace marginally ahead, and further ahead
+%      on the MediaPipe proxy: 0.88 vs 0.83).
+%   2. FineFace WINS absolute calibration decisively.
+%   3. This work wins cross-frame identity, modestly but consistently
+%      (63--68% of prompts, roughly 2.5x lower variance).
+% Therefore the defensible contribution is the sequence-native formulation
+% and the measurement protocol, NOT superior expression control. State this
+% conclusion explicitly here so that Cap01 and Cap06 can rely on it.
+
+\todo[inline]{Narrate the three outcomes and draw the positioning conclusion explicitly.}
+
+% =====================================================================
+\section{Qualitative Results}\label{sec:res-qualitative}
+
+% Suggested figures (place the exported frames under images/):
+%   1. One ramp: frames at commanded 0.0 to 1.0, trained vs frozen baseline.
+%   2. Side-by-side with FineFace stills at matched levels, to make the
+%      identity drift visible rather than merely tabulated.
+%   3. A failure case. Include one; it buys credibility.
+
+\todo[inline]{Export frames into images/ and add the three figures.}
+
+% =====================================================================
+\section{Threats to Validity}\label{sec:res-threats}
+
+\begin{itemize}
+    \item \textbf{Label--evaluation circularity.} py-feat provides both the training labels and the primary metric. Mitigated by the independent MediaPipe measurement (Section~\ref{subsec:eval-circularity}), which agreed, but not eliminated.
+    \item \textbf{Demographic bias.} Ramp $r$ is $0.83$ for female prompts against $0.71$ for male prompts. The prior art shows the opposite skew, which localises the cause to the \gls{mead} training distribution rather than to AU-conditioned generation in general. \todo[inline]{Confirm the FineFace per-gender figures against lab note 2026-07-21.}
+    \item \textbf{Lab-domain training data.} A single dataset, a single emotion category, frontal views, controlled lighting. Generalisation to in-the-wild portraits is untested.
+    \item \textbf{Single control axis.} Only AU12 is conditioned; the prior art controls twelve action units and their combinations.
+    \item \textbf{Single training run.} One seed, one checkpoint; no variance estimate over training runs.
+    \item \textbf{No evidence yet that training drives the capability.} The training-step dose--response experiment is pending (Cap06). \todo[inline]{Intermediate checkpoints are the raw material and must not be deleted before this runs.}
+\end{itemize}

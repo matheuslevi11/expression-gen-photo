@@ -1,0 +1,118 @@
+\chapter{Related Work}\label{cap:related-work}
+\glsresetall
+
+% =====================================================================
+% SKELETON. Target: 8--12 pages.
+%
+% Source material: docs/experiments/2026-07-11-related-work-study.md holds
+% full per-paper analyses (method, data, metrics, headline numbers with
+% section references) from complete reads of the four PDFs in related_work/.
+% Pull the prose from there; do not re-derive it.
+%
+% Organise BY TASK FORMULATION, not chronologically. The whole point of the
+% chapter is to show that the four closest systems solve three different
+% problems, and that none solves the one posed in Chapter~\ref{cap:introduction}.
+% =====================================================================
+
+\todo[inline]{Opening paragraph: the three task formulations (transfer, editing, generation) and where this work sits.}
+
+% =====================================================================
+\section{Expression Transfer from an Exemplar}\label{sec:rw-transfer}
+
+% \citet{jiang2024emojidiff}: control signal is an RGB exemplar image
+% (masked face, CLIP-encoded) injected via IP-Adapter-style decoupled
+% cross-attention into frozen SD1.5; identity from a reference photo;
+% ArcFace identity loss on one-step decodes.
+% Relation: adjacent, not competing. It cannot accept "smile = 0.5" as
+% input; a user must supply an exemplar per intensity level.
+% Their Sec. 1 critique of signal-conditioned methods (detail loss,
+% dependence on third-party detector accuracy) applies to this work and
+% should be acknowledged and answered in Cap04.
+
+\todo[inline]{EmojiDiff: mechanism, why exemplar conditioning is not a numeric control axis.}
+
+% =====================================================================
+\section{Expression Editing of a Source Image}\label{sec:rw-editing}
+
+\subsection{Action-Unit Conditioned Editing}\label{subsec:rw-magicface}
+
+% \citet{wei2025magicface}: 12-dim AU *variation* vector (target minus
+% source), injected through a linear layer added to the time embedding;
+% FULL fine-tune of the denoising UNet plus a UNet-copy ID encoder;
+% AU dropout plus CFG on the AU condition.
+% Relation: closest in control semantics (continuous AU intensity on SD),
+% but editing rather than generation, relative rather than absolute targets
+% (requires source-AU estimation at inference), no temporal mechanism, and
+% far more trainable parameters.
+% Their lab-vs-wild ablation predicts this work's lab-domain artifacts.
+
+\todo[inline]{MagicFace: relative AU vectors, full fine-tune, and what "relative" costs at inference.}
+
+\subsection{Intensity as a Text-Embedding Direction}\label{subsec:rw-pixelsmile}
+
+% \citet{hua2026pixelsmile}: intensity alpha scales a text-embedding
+% direction on Qwen-Image-Edit with LoRA; source of the CLS protocol
+% adopted in Cap04.
+% Two points must be made:
+%   1. Their zero-shot row (no training, text-embedding interpolation alone)
+%      already achieves substantial linearity. This is the "why not just
+%      prompt it?" objection and it must be answered, not ignored -- hence
+%      the prompt-engineering baseline planned in Cap06.
+%   2. Their negative MEAD result does NOT transfer: they mapped MEAD's
+%      three discrete levels to {0.5, 0.75, 1.0}, discarding the continuous
+%      per-frame signal this work extracts.
+
+\todo[inline]{PixelSmile: the CLS protocol, the zero-shot baseline objection, why their MEAD result does not transfer.}
+
+% =====================================================================
+\section{Action-Unit Conditioned Generation}\label{sec:rw-fineface}
+
+% THE PRIOR ART. State this plainly and early: \citet{varanka2024fineface}
+% (July 2024) generates faces from text conditioned on a continuous 12-dim
+% AU intensity vector, with no source image, using an adapter on a frozen
+% backbone plus CFG on the AU condition, and demonstrates out-of-range
+% extrapolation. Its control is BROADER than this work's single AU12 axis.
+% Any claim of primacy for "AU-conditioned generation" is therefore
+% unavailable and must not appear anywhere in the text.
+%
+% What it does not do, and this is the opening this work occupies:
+%   - its intensity sweep is N INDEPENDENT stills, sharing only a seed;
+%     nothing binds identity across levels architecturally;
+%   - it reports NO face-identity metric at all;
+%   - intensity control is shown qualitatively only, with the authors
+%     conceding the scale is nonlinear; there is no commanded-vs-detected
+%     correlation anywhere.
+
+\todo[inline]{FineFace: present as prior art, precisely delimit what it leaves open.}
+
+% =====================================================================
+\section{Positioning}\label{sec:rw-positioning}
+
+% The table below is transcribed from the comparison in
+% docs/experiments/2026-07-11-related-work-study.md. Verify each cell
+% against the papers before submitting, and keep the "Ours" column honest:
+% the FineFace head-to-head (2026-07-21) showed ramp-following is a TIE and
+% that FineFace WINS absolute calibration. The differentiator is the
+% sequence-native formulation and the measurement protocol.
+
+\begin{table}[H]
+    \centering
+    \caption{Positioning of this work against the closest systems.}
+    \label{tab:positioning}
+    \footnotesize
+    \begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+        \toprule
+        Axis & MagicFace / PixelSmile & FineFace & This work \\
+        \midrule
+        Task              & editing a source image      & generation, independent stills   & generation, one coherent clip \\
+        Control input     & relative AU vector / unitless $\alpha$ & absolute 12-AU vector   & per-frame AU12 trajectory \\
+        Source image       & required                   & not required                     & not required \\
+        Identity across levels & loss term (single image) & no mechanism, no metric        & temporal attention (measured) \\
+        Intensity reported as & aggregate error / VLM-judged & qualitative sweeps          & correlation + absolute error \\
+        Label/eval circularity & unflagged               & unflagged                        & flagged and mitigated \\
+        \bottomrule
+    \end{tabularx}\\[4pt]
+    {\footnotesize Source: prepared by the author.}
+\end{table}
+
+\todo[inline]{Closing paragraph: state the gap this work fills, in one sentence, and forward-reference Cap04.}

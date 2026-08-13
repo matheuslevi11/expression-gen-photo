@@ -1,0 +1,129 @@
+% =====================================================================
+% Master's Thesis Proposal (Proposta de Dissertacao de Mestrado)
+% "Nuanced Facial Expression Synthesis in Generative Models"
+% Matheus Levi Rodrigues Aidano -- PPGI / IC-UFAL
+%
+% Written in ENGLISH. JITH.cls was patched to English (babel + cover/title
+% page strings). See NOTES.md for what changed and how to revert.
+%
+% Build:  latexmk -pdf main.tex          (runs bibtex automatically)
+%         makeglossaries main            (once, if the acronym list changes)
+% or the explicit sequence:
+%         pdflatex main && bibtex main && makeglossaries main \
+%           && pdflatex main && pdflatex main
+% =====================================================================
+\documentclass[12pt,a4paper,oneside]{JITH}
+%\documentclass[12pt,a4paper,twoside]{JITH}
+
+% --- Tables ----------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+
+% --- Fonts / math ----------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amsfonts, amssymb, mathtools}
+\usepackage{bm}
+
+% --- Figures ---------------------------------------------------------
+\usepackage{graphicx}
+\graphicspath{{images/}}
+\usepackage[caption=false]{subfig}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, fit, calc, backgrounds}
+
+% --- Text / layout ---------------------------------------------------
+\usepackage{indentfirst}
+\usepackage{hyperref}
+\usepackage{todonotes}          % \todo{...} margin notes -- see NOTES.md
+\usepackage{natbib}             % \citep / \citet, apalike style
+
+% glossaries MUST come after hyperref (per its documentation).
+\usepackage[acronym, toc, nonumberlist, nogroupskip, nopostdot]{glossaries}
+\makeglossaries
+\loadglsentries{Cap00/Glossario}
+
+% --- Revision markup (advisor review cycles) -------------------------
+% \replace{old}{new} \add{...} \remove{...} \comment{text}{note}
+% \highlight{...} \alert{...}
+% Use \setreviewsoff before submitting to render the final text clean.
+\usepackage{easyReview}
+\setreviewson
+
+\input{macros}
+
+\onehalfspacing
+\begin{document}
+\sloppy
+
+% =====================================================================
+\include{Identificacao}
+% =====================================================================
+\capa
+\folhaDeRosto
+% \folhaDeAprovacao      % only for the final, signed version
+
+% --- Optional front matter -------------------------------------------
+\agradecimentos
+%\epigrafe
+
+% --- Required front matter -------------------------------------------
+% Abstract (EN) first because the document is in English; Resumo (PT) is
+% kept because Brazilian graduate programs generally require it.
+\abstract
+\resumo
+
+\listoffigures
+\cleardoublepage
+\listoftables
+\cleardoublepage
+\simbolos
+\cleardoublepage
+\abreviaturas
+\cleardoublepage
+
+\tableofcontents
+\cleardoublepage
+
+% =====================================================================
+\pagenumbering{arabic}
+
+\pagestyle{myheadings}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{}}
+\renewcommand{\sectionmark}[1]{\markright{#1}}
+
+% =====================================================================
+% Chapters
+% =====================================================================
+\input{Cap01/Introduction}
+\cleardoublepage
+% ---------------------------------------------------------------------
+\input{Cap02/Background}
+\cleardoublepage
+% ---------------------------------------------------------------------
+\input{Cap03/RelatedWork}
+\cleardoublepage
+% ---------------------------------------------------------------------
+\input{Cap04/Method}
+\cleardoublepage
+% ---------------------------------------------------------------------
+\input{Cap05/PreliminaryResults}
+\cleardoublepage
+% ---------------------------------------------------------------------
+\input{Cap06/Schedule}
+\cleardoublepage
+
+% =====================================================================
+% Bibliography
+% =====================================================================
+\markright{Bibliography}
+\bibliographystyle{apalike}
+%\bibliographystyle{ieeetr}
+{
+	\addcontentsline{toc}{chapter}{Bibliography}
+	\bibliography{Ref/references}
+}
+\cleardoublepage
+
+\end{document}

@@ -1,0 +1,28 @@
+% =====================================================================
+% Macros -- Nuanced Facial Expression Synthesis in Generative Models
+%
+% HISTORICAL WARNING (kept from the template): the original template's
+% macros.tex redefined standard LaTeX commands, notably \S (the section
+% symbol) as \mathbb{S}, which broke every "\S\ref{...}" in the text.
+% Do NOT redefine single-letter or standard control sequences here.
+% =====================================================================
+
+% --- Project nouns ---------------------------------------------------
+\newcommand{\genphoto}{\textsc{GenPhoto}}          % Yuan et al. 2024, the base model
+\newcommand{\genexpr}{\textsc{GenExpression}}      % this work (rename if desired)
+\newcommand{\fineface}{\textsc{FineFace}}          % closest prior art
+\newcommand{\mead}{\textsc{MEAD}}                  % training dataset
+
+% --- Notation --------------------------------------------------------
+\newcommand{\intensity}{s}                         % commanded intensity scalar
+\newcommand{\intensityhat}{\hat{s}}                % detected intensity
+\newcommand{\autwelve}{\text{AU12}}                % lip-corner puller
+\newcommand{\pearson}{\ensuremath{r}}              % Pearson correlation
+\newcommand{\frames}{F}                            % number of frames in a clip
+
+% --- Convenience -----------------------------------------------------
+% Placeholder for numbers that still need to be filled in / re-checked.
+% Renders visibly so nothing provisional slips into the submitted PDF.
+\newcommand{\TBD}{\textcolor{red}{\textbf{[TBD]}}}
+% Cross-reference to a lab-notebook entry in docs/experiments/.
+\newcommand{\labnote}[1]{\todo[inline, color=blue!12]{lab note: #1}}

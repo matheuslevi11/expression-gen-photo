@@ -1,0 +1,19 @@
+\chapter*{List of Symbols}
+\addcontentsline{toc}{chapter}{List of Symbols}
+
+% Keep this list in sync with the notation actually used in Cap04.
+% If the proposal ends up using little formal notation, drop this list and
+% the \simbolos call in main.tex (check with the advisor first).
+
+\begin{description}
+    \item[$s_t$] Commanded expression intensity for frame $t$, $s_t \in [0,1]$
+    \item[$\hat{s}_t$] Intensity detected in the generated frame $t$ by an external estimator
+    \item[$F$] Number of frames in a generated sequence
+    \item[$r$] Pearson correlation between commanded and detected intensity
+    \item[$\mathbf{c}_e$] Expression embedding produced by the expression encoder
+    \item[$\mathbf{c}_p$] Text-prompt embedding
+    \item[$\epsilon_\theta$] Noise-prediction network (denoising UNet)
+    \item[$z_t$] Latent at diffusion timestep $t$
+    \item[$\mathcal{L}$] Training objective
+    \item[$\lambda$] Merge / injection weight of the expression branch
+\end{description}

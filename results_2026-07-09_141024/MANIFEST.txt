@@ -1,0 +1,6 @@
+exported : 2026-07-09T14:10:24-03:00
+host     : rig-Super-Server
+repo     : /databases-4tb/levi-experiments/generative-photography
+commit   : 161c26e (Docs: split status log into living status.md + append-only experiments/)
+dirty    : 2 uncommitted change(s)
+samples  : excluded

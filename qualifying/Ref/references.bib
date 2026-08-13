@@ -1,0 +1,298 @@
+% =====================================================================
+% Bibliography -- Nuanced Facial Expression Synthesis in Generative Models
+%
+% Starter set. The four related-work entries and the GenPhoto entry were
+% taken from the actual PDFs in ../related_work/ and the fork's README, so
+% their titles/authors/identifiers are accurate.
+%
+% ⚠ Entries marked "% VERIFY" were entered from memory (standard, widely
+% cited works) and MUST be checked against the publisher record or DBLP
+% before submission -- page numbers, exact venue names and full author
+% lists in particular. Do not trust an unverified entry in a submitted PDF.
+%
+% Style: apalike (author-year) via \bibliographystyle in main.tex.
+% Cite with \citep{key} (parenthetical) or \citet{key} (textual).
+% =====================================================================
+
+
+% =====================================================================
+% The base model this work forks
+% =====================================================================
+
+% Source: fork README.md "Citation" section (authoritative for this repo).
+@article{yuan2024genphoto,
+  author  = {Yuan, Yu and Wang, Xijun and Sheng, Yichen and Chennuri, Prateek and Zhang, Xingguang and Chan, Stanley},
+  title   = {Generative Photography: Scene-Consistent Camera Control for Realistic Text-to-Image Synthesis},
+  journal = {arXiv preprint arXiv:2412.02168},
+  year    = {2024}
+}
+
+
+% =====================================================================
+% Closest prior art -- read in full, see docs/experiments/2026-07-11-related-work-study.md
+% Metadata taken from the PDFs in related_work/.
+% =====================================================================
+
+% PRIOR ART for AU-intensity-conditioned text-to-image generation.
+% Frozen SD 2.1-base + AU encoder + decoupled cross-attention + LoRA-32.
+% Intensity control shown qualitatively only; no identity metric.
+@article{varanka2024fineface,
+  author  = {Varanka, Tuomas and Khor, Huai-Qian and Li, Yante and Wei, Mengting and Kung, Hanwei and Sebe, Nicu and Zhao, Guoying},
+  title   = {Towards Localized Fine-Grained Control for Facial Expression Generation},
+  journal = {arXiv preprint arXiv:2407.20175},
+  year    = {2024}
+}
+
+% Same group as FineFace; the editing sibling. 12-dim AU *variation* vector,
+% full UNet fine-tune + UNet-copy ID encoder. AU dropout + expression-CFG.
+@article{wei2025magicface,
+  author  = {Wei, Mengting and Varanka, Tuomas and Jiang, Xingxun and Khor, Huai-Qian and Zhao, Guoying},
+  title   = {MagicFace: High-Fidelity Facial Expression Editing with Action-Unit Control},
+  journal = {arXiv preprint arXiv:2501.02260},
+  year    = {2025}
+}
+
+% Expression *transfer* from an RGB exemplar; IP-Adapter-style injection into
+% frozen SD1.5 + ArcFace identity loss on one-step decodes.
+@article{jiang2024emojidiff,
+  author  = {Jiang, Liangwei and Li, Ruida and Zhang, Zhifeng and Fang, Shuo and Ma, Chenguang},
+  title   = {EmojiDiff: Advanced Facial Expression Control with High Identity Preservation in Portrait Generation},
+  journal = {arXiv preprint arXiv:2412.01254},
+  year    = {2024}
+}
+
+% Editing on Qwen-Image-Edit with LoRA-64; intensity scales a text-embedding
+% direction. Source of the CLS (control-linearity) evaluation protocol.
+@article{hua2026pixelsmile,
+  author  = {Hua, Jiabin and Xu, Hengyuan and Li, Aojie and Cheng, Wei and Yu, Gang and Ma, Xingjun and Jiang, Yu-Gang},
+  title   = {PixelSmile: Toward Fine-Grained Facial Expression Editing},
+  journal = {arXiv preprint arXiv:2603.25728},
+  year    = {2026}
+}
+
+
+% =====================================================================
+% Diffusion models
+% =====================================================================
+
+@inproceedings{ho2020ddpm,
+  author    = {Ho, Jonathan and Jain, Ajay and Abbeel, Pieter},
+  title     = {Denoising Diffusion Probabilistic Models},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2020}
+}
+
+% VERIFY -- pages
+@inproceedings{rombach2022ldm,
+  author    = {Rombach, Robin and Blattmann, Andreas and Lorenz, Dominik and Esser, Patrick and Ommer, Bj{\"o}rn},
+  title     = {High-Resolution Image Synthesis with Latent Diffusion Models},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2022}
+}
+
+% VERIFY
+@inproceedings{song2021ddim,
+  author    = {Song, Jiaming and Meng, Chenlin and Ermon, Stefano},
+  title     = {Denoising Diffusion Implicit Models},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2021}
+}
+
+@article{ho2022cfg,
+  author  = {Ho, Jonathan and Salimans, Tim},
+  title   = {Classifier-Free Diffusion Guidance},
+  journal = {arXiv preprint arXiv:2207.12598},
+  year    = {2022}
+}
+
+
+% =====================================================================
+% Controllable and temporal generation
+% =====================================================================
+
+% VERIFY -- full author list is long; confirm on DBLP.
+@inproceedings{guo2024animatediff,
+  author    = {Guo, Yuwei and Yang, Ceyuan and Rao, Anyi and Liang, Zhengyang and Wang, Yaohui and Qiao, Yu and Agrawala, Maneesh and Lin, Dahua and Dai, Bo},
+  title     = {AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024}
+}
+
+% VERIFY
+@inproceedings{zhang2023controlnet,
+  author    = {Zhang, Lvmin and Rao, Anyi and Agrawala, Maneesh},
+  title     = {Adding Conditional Control to Text-to-Image Diffusion Models},
+  booktitle = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  year      = {2023}
+}
+
+@article{ye2023ipadapter,
+  author  = {Ye, Hu and Zhang, Jun and Liu, Sibo and Han, Xiao and Yang, Wei},
+  title   = {IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models},
+  journal = {arXiv preprint arXiv:2308.06721},
+  year    = {2023}
+}
+
+% VERIFY
+@inproceedings{hu2022lora,
+  author    = {Hu, Edward J. and Shen, Yelong and Wallis, Phillip and Allen-Zhu, Zeyuan and Li, Yuanzhi and Wang, Shean and Wang, Lu and Chen, Weizhu},
+  title     = {LoRA: Low-Rank Adaptation of Large Language Models},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2022}
+}
+
+
+% =====================================================================
+% Facial expression representation and AU-conditioned synthesis
+% =====================================================================
+
+% VERIFY -- publisher/edition; the 1978 Consulting Psychologists Press
+% edition is the usual citation, but many works cite Ekman & Friesen 2002.
+@book{ekman1978facs,
+  author    = {Ekman, Paul and Friesen, Wallace V.},
+  title     = {Facial Action Coding System: A Technique for the Measurement of Facial Movement},
+  publisher = {Consulting Psychologists Press},
+  address   = {Palo Alto, CA},
+  year      = {1978}
+}
+
+% VERIFY -- GANimation, the pre-diffusion reference for continuous AU control.
+@inproceedings{pumarola2018ganimation,
+  author    = {Pumarola, Albert and Agudo, Antonio and Martinez, Aleix M. and Sanfeliu, Alberto and Moreno-Noguer, Francesc},
+  title     = {GANimation: Anatomically-Aware Facial Animation from a Single Image},
+  booktitle = {European Conference on Computer Vision (ECCV)},
+  year      = {2018}
+}
+
+% VERIFY
+@inproceedings{choi2018stargan,
+  author    = {Choi, Yunjey and Choi, Minje and Kim, Munyoung and Ha, Jung-Woo and Kim, Sunghun and Choo, Jaegul},
+  title     = {StarGAN: Unified Generative Adversarial Networks for Multi-Domain Image-to-Image Translation},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2018}
+}
+
+
+% =====================================================================
+% Datasets
+% =====================================================================
+
+% VERIFY -- full author list.
+@inproceedings{wang2020mead,
+  author    = {Wang, Kaisiyuan and Wu, Qianyi and Song, Linsen and Yang, Zhuoqian and Wu, Wayne and Qian, Chen and He, Ran and Qiao, Yu and Loy, Chen Change},
+  title     = {MEAD: A Large-Scale Audio-Visual Dataset for Emotional Talking-Face Generation},
+  booktitle = {European Conference on Computer Vision (ECCV)},
+  year      = {2020}
+}
+
+% VERIFY -- volume/pages.
+@article{mavadati2013disfa,
+  author  = {Mavadati, S. Mohammad and Mahoor, Mohammad H. and Bartlett, Kevin and Trinh, Philip and Cohn, Jeffrey F.},
+  title   = {DISFA: A Spontaneous Facial Action Intensity Database},
+  journal = {IEEE Transactions on Affective Computing},
+  year    = {2013}
+}
+
+% VERIFY -- volume/pages.
+@article{mollahosseini2019affectnet,
+  author  = {Mollahosseini, Ali and Hasani, Behzad and Mahoor, Mohammad H.},
+  title   = {AffectNet: A Database for Facial Expression, Valence, and Arousal Computing in the Wild},
+  journal = {IEEE Transactions on Affective Computing},
+  year    = {2019}
+}
+
+
+% =====================================================================
+% Measurement tools -- expression, identity, perceptual quality
+% =====================================================================
+
+% Produces both the training labels and the evaluation metric in this work;
+% the resulting circularity is addressed explicitly in Cap04.
+% VERIFY -- volume/pages of Affective Science.
+@article{cheong2023pyfeat,
+  author  = {Cheong, Jin Hyun and Jolly, Eshin and Xie, Tiankang and Byrne, Sophie and Kenney, Matthew and Chang, Luke J.},
+  title   = {Py-Feat: Python Facial Expression Analysis Toolbox},
+  journal = {Affective Science},
+  year    = {2023}
+}
+
+% VERIFY
+@article{lugaresi2019mediapipe,
+  author  = {Lugaresi, Camillo and Tang, Jiuqiang and Nash, Hadon and McClanahan, Chris and Uboweja, Esha and Hays, Michael and Zhang, Fan and Chang, Chuo-Ling and Yong, Ming Guang and Lee, Juhyun and Chang, Wan-Teh and Hua, Wei and Georg, Manfred and Grundmann, Matthias},
+  title   = {MediaPipe: A Framework for Building Perception Pipelines},
+  journal = {arXiv preprint arXiv:1906.08172},
+  year    = {2019}
+}
+
+% VERIFY
+@inproceedings{chang2024libreface,
+  author    = {Chang, Di and Yin, Yufeng and Li, Zongjian and Tran, Minh and Soleymani, Mohammad},
+  title     = {LibreFace: An Open-Source Toolkit for Deep Facial Expression Analysis},
+  booktitle = {IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  year      = {2024}
+}
+
+% VERIFY
+@inproceedings{deng2019arcface,
+  author    = {Deng, Jiankang and Guo, Jia and Xue, Niannan and Zafeiriou, Stefanos},
+  title     = {ArcFace: Additive Angular Margin Loss for Deep Face Recognition},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2019}
+}
+
+% VERIFY
+@inproceedings{schroff2015facenet,
+  author    = {Schroff, Florian and Kalenichenko, Dmitry and Philbin, James},
+  title     = {FaceNet: A Unified Embedding for Face Recognition and Clustering},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2015}
+}
+
+% VERIFY
+@inproceedings{cao2018vggface2,
+  author    = {Cao, Qiong and Shen, Li and Xie, Weidi and Parkhi, Omkar M. and Zisserman, Andrew},
+  title     = {VGGFace2: A Dataset for Recognising Faces across Pose and Age},
+  booktitle = {IEEE International Conference on Automatic Face and Gesture Recognition (FG)},
+  year      = {2018}
+}
+
+% VERIFY
+@inproceedings{zhang2018lpips,
+  author    = {Zhang, Richard and Isola, Phillip and Efros, Alexei A. and Shechtman, Eli and Wang, Oliver},
+  title     = {The Unreasonable Effectiveness of Deep Features as a Perceptual Metric},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2018}
+}
+
+
+% =====================================================================
+% Foundations reused from the template's bibliography (already verified there)
+% =====================================================================
+
+@inproceedings{goodfellow2014gan,
+  author    = {Goodfellow, Ian J. and Pouget-Abadie, Jean and Mirza, Mehdi and Xu, Bing and Warde-Farley, David and Ozair, Sherjil and Courville, Aaron and Bengio, Yoshua},
+  title     = {Generative Adversarial Nets},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2014}
+}
+
+@inproceedings{vaswani2017transformer,
+  author    = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Lukasz and Polosukhin, Illia},
+  title     = {Attention Is All You Need},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2017}
+}
+
+@inproceedings{dosovitskiy2021vit,
+  author    = {Dosovitskiy, Alexey and Beyer, Lucas and Kolesnikov, Alexander and Weissenborn, Dirk and Zhai, Xiaohua and Unterthiner, Thomas and Dehghani, Mostafa and Minderer, Matthias and Heigold, Georg and Gelly, Sylvain and Uszkoreit, Jakob and Houlsby, Neil},
+  title     = {An Image Is Worth {16$\times$16} Words: Transformers for Image Recognition at Scale},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2021}
+}
+
+@inproceedings{radford2021clip,
+  author    = {Radford, Alec and Kim, Jong Wook and Hallacy, Chris and Ramesh, Aditya and Goh, Gabriel and Agarwal, Sandhini and Sastry, Girish and Askell, Amanda and Mishkin, Pamela and Clark, Jack and Krueger, Gretchen and Sutskever, Ilya},
+  title     = {Learning Transferable Visual Models from Natural Language Supervision},
+  booktitle = {International Conference on Machine Learning (ICML)},
+  year      = {2021}
+}

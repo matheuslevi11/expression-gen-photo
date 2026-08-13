@@ -1,0 +1,165 @@
+\chapter{Proposed Method}\label{cap:method}
+\glsresetall
+
+% =====================================================================
+% SKELETON. Target: 12--16 pages. The core chapter of the proposal.
+%
+% Ground truth for every claim here: docs/status.md (living state) and the
+% dated entries in docs/experiments/. Code paths are listed in the file map
+% at the end of docs/status.md. If a number appears in this chapter, it must
+% trace to a lab-notebook entry.
+%
+% Rule for a PROPOSAL: separate clearly what is BUILT AND VERIFIED from what
+% is PLANNED. The banca will ask. Cap06 holds the schedule for the planned
+% part; this chapter should mark it inline.
+% =====================================================================
+
+\todo[inline]{Opening paragraph: one-sentence statement of the method, then the chapter roadmap.}
+
+% =====================================================================
+\section{Overview}\label{sec:method-overview}
+
+% Reframe the task formally: given a text prompt p and a per-frame intensity
+% trajectory (s_1, ..., s_F), generate ONE clip of F frames sharing identity
+% and scene, in which the detected AU12 intensity of frame t tracks s_t.
+% Contrast in one sentence with the prior-art formulation (F independent
+% samples), since that contrast is the contribution.
+%
+% A system figure belongs here. Suggested content: text prompt and intensity
+% list on the left; expression encoder producing the conditioning tensor;
+% frozen SD1.5 UNet plus AnimateDiff motion module in the middle; the
+% zero-initialised merge into temporal attention highlighted; output clip on
+% the right; frozen vs trainable components colour-coded. Draw with TikZ
+% (already loaded) and save nothing to images/ unless it is a raster.
+
+\todo[inline]{Formal task statement + system figure. Colour-code frozen vs trainable.}
+
+% =====================================================================
+\section{Backbone and Trainable Components}\label{sec:method-backbone}
+
+% Be exact and verifiable about what trains and what does not:
+%   Frozen: SD1.5 UNet, VAE, CLIP text encoder, AnimateDiff motion module.
+%   Trainable: the expression encoder and the attention merge weights.
+% Give the trainable parameter count and contrast it with the fully
+% fine-tuned prior art (see the comparison in the related-work study note).
+% State the compute honestly: a single RTX 3090, 100k steps. This is a
+% strength of the proposal, not something to hide.
+
+\todo[inline]{Table of frozen vs trainable modules with parameter counts.}
+
+% =====================================================================
+\section{Expression Conditioning}\label{sec:method-conditioning}
+
+\subsection{Intensity Embedding}\label{subsec:method-embedding}
+
+% The scalar intensity is broadcast into the 6-channel conditioning layout
+% inherited from \citet{yuan2024genphoto} (cin: 384), so the mechanism is
+% unchanged from the camera-parameter original. Explain what replaces the
+% physical channels (blur kernel, crop mask) and why a scalar broadcast is
+% the right first formulation.
+% Name it as "Option A" if that vocabulary is kept from docs/plan.md, and
+% state the alternative (landmark flow, multi-AU vector) as future work.
+
+\todo[inline]{Describe create\_intensity\_embedding: scalar to 6-channel broadcast, dimensions.}
+
+\subsection{Change Encoding in the Text Branch}\label{subsec:method-ccl}
+
+% The \gls{ccl} text encoding represents the direction and magnitude of
+% change BETWEEN consecutive frames, which is meaningless in a single-image
+% setting and is therefore genuinely specific to this formulation. Show the
+% prompt template ("<smile intensity: ...>") and how it differs from
+% GenPhoto's camera phrasing.
+
+\todo[inline]{CCL adaptation: prompt template and the between-frames semantics.}
+
+\subsection{Injection into Temporal Attention}\label{subsec:method-merge}
+
+% The merge weights are zero-initialised, which has a useful consequence
+% worth stating explicitly: with no adaptor checkpoint loaded, the model is
+% bit-identical to the unmodified backbone. That is what makes the ablation
+% baseline provably fair (verified 2026-07-09), and it is a small but real
+% methodological point.
+
+\todo[inline]{Merge mechanism + the zero-init equals frozen-backbone equivalence argument.}
+
+% =====================================================================
+\section{Training Data}\label{sec:method-data}
+
+% MEAD front-view "happy" clips \citep{wang2020mead}; MediaPipe crops;
+% continuous per-frame AU12 labels from py-feat \citep{cheong2023pyfeat};
+% train/validation split sizes from docs/status.md.
+% State the two known data limitations here rather than burying them:
+%   1. clips are onset-to-apex RAMPS only, which is the root cause of the
+%      calibration result in Cap05;
+%   2. MEAD "happy" clips carry high AU12 even at low labelled levels.
+
+\todo[inline]{Preprocessing pipeline, split sizes, label extraction, and the ramp-only property of the data.}
+
+% =====================================================================
+\section{Training Setup}\label{sec:method-training}
+
+\todo[inline]{Objective, optimiser, schedule, batch/accumulation, steps, hardware, checkpointing.}
+
+% =====================================================================
+\section{Evaluation Protocol}\label{sec:method-evaluation}
+
+% This section is a contribution in its own right, because none of the four
+% closest papers measures all three axes. Present it as three separate
+% questions with separate instruments.
+
+\subsection{Trajectory Following}\label{subsec:eval-ramp}
+
+% Pearson r between the commanded per-frame intensity and the AU12 intensity
+% detected in the generated frame. Report the prompt bank size and the number
+% of seeds so the protocol is reproducible.
+
+\todo[inline]{Ramp-following protocol: prompt bank, seeds, correlation computation.}
+
+\subsection{Absolute Calibration}\label{subsec:eval-calibration}
+
+% The measurement that separates "follows a ramp" from "is calibrated":
+% hold the commanded value CONSTANT across the clip and vary it between
+% clips; a calibrated model changes its output, an ordinal one does not.
+% Adopt the \gls{cls} protocol of \citet{hua2026pixelsmile} for
+% comparability, plus an absolute-error complement, because Pearson r is
+% invariant to scale and offset (Section~\ref{sec:bg-metrics}).
+
+\todo[inline]{Constant-list and permuted-list designs; CLS plus absolute error.}
+
+\subsection{Identity Consistency}\label{subsec:eval-identity}
+
+% Frame-to-frame face-embedding cosine within a generated clip
+% \citep{schroff2015facenet, cao2018vggface2}, and the same measurement
+% across the independent stills of the baseline. Report the adjacent-frame
+% minimum, not just the mean, since the worst transition is what a viewer
+% notices. Multi-model averaging (adding ArcFace \citep{deng2019arcface})
+% is planned; see Cap06.
+
+\todo[inline]{Identity protocol: embedding model(s), adjacent-frame minimum, baseline treatment.}
+
+\subsection{Guarding Against Label--Evaluation Circularity}\label{subsec:eval-circularity}
+
+% The honest statement of a real threat: py-feat produces the training
+% labels AND the primary metric. Mitigation is a second estimator from a
+% different family (MediaPipe mouth-corner geometry) that touched no labels.
+% Worth stating that all four studied papers share this circularity without
+% flagging it, so doing so is an evaluation contribution rather than an
+% admission of weakness.
+
+\todo[inline]{State the circularity, the independent-detector mitigation, and its limits.}
+
+% =====================================================================
+\section{Baselines}\label{sec:method-baselines}
+
+\begin{itemize}
+    \item \textbf{Frozen backbone.} Same seed, no expression conditioning; provably identical to the unmodified backbone by the zero-init argument of Section~\ref{subsec:method-merge}. Isolates the effect of the trained adaptor.
+    \item \textbf{Prior art, matched prompts.} \citet{varanka2024fineface} run as independent stills over the same prompts and intensity levels. This is the comparison that isolates the sequence-native claim.
+    \item \textbf{Prompt engineering.} Graded textual descriptions of smile intensity on the unmodified backbone, answering the "why not just prompt it?" objection raised by the zero-shot result of \citet{hua2026pixelsmile}. \todo[inline]{Planned, not yet run: see Cap06.}
+\end{itemize}
+
+% Reproducibility note worth one short paragraph: inference is seed-locked
+% (re-seeded immediately before sampling), so the same seed and config give
+% bit-identical outputs and ablations differing only in construction-time RNG
+% draws remain comparable.
+
+\todo[inline]{Add the seed-control reproducibility paragraph.}

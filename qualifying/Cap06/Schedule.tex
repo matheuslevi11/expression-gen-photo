@@ -1,0 +1,122 @@
+\chapter{Schedule and Final Remarks}\label{cap:schedule}
+\glsresetall
+
+% =====================================================================
+% SKELETON. Target: 5--8 pages.
+%
+% This is the chapter the banca reads most carefully in a proposal, because
+% it is where they judge whether the remaining work is feasible in the time
+% left. Two rules:
+%   1. Every item in "remaining work" must map to a row in the timetable.
+%   2. Distinguish work that needs RETRAINING (expensive, schedule it early)
+%      from work that only needs inference and scoring (cheap, parallelisable).
+%
+% Sources: the Readiness and Evaluation Robustness checklists in
+% docs/status.md. Keep this chapter in sync with them; they are the same
+% list seen from two angles.
+% =====================================================================
+
+% =====================================================================
+\section{Work Completed}\label{sec:sched-completed}
+
+% Short and factual, in the order of Cap05. Resist re-arguing the results
+% here; a compact list plus cross-references to Chapter~\ref{cap:preliminary-results}
+% is enough.
+
+\begin{itemize}
+    \item Expression conditioning pipeline: dataset, per-frame \gls{au} supervision, embedding, training and inference entry points.
+    \item Full training run to 100k steps on a single GPU.
+    \item Trajectory-following evaluation at scale, with an independent estimator (Section~\ref{sec:res-ramp}).
+    \item Identity-consistency measurement against a provably fair frozen-backbone baseline (Section~\ref{sec:res-identity}).
+    \item Absolute-calibration measurement, with a negative outcome and a diagnosis (Section~\ref{sec:res-calibration}).
+    \item Head-to-head comparison against the closest prior art under matched prompts (Section~\ref{sec:res-headtohead}).
+\end{itemize}
+
+% =====================================================================
+\section{Remaining Work}\label{sec:sched-remaining}
+
+\subsection{Requires Retraining}\label{subsec:sched-retrain}
+
+% Schedule these first; they gate everything downstream.
+
+\begin{itemize}
+    \item \textbf{Calibration remedies.} Augment training with constant and permuted intensity trajectories so the model observes non-ramp targets; add \gls{au} dropout with \gls{cfg} on the expression condition \citep{wei2025magicface}; apply label distribution smoothing \citep{varanka2024fineface}. Target: turn the relative control of Section~\ref{sec:res-calibration} into absolute control. \todo[inline]{Decide with the advisor whether this is in scope for the dissertation or is stated as a limitation.}
+    \item \textbf{Multi-AU extension.} Generalise the single AU12 axis to an AU vector, matching the control breadth of the prior art. \todo[inline]{Scope decision needed: this may be one axis too many for the time available.}
+\end{itemize}
+
+\subsection{Inference and Evaluation Only}\label{subsec:sched-eval}
+
+% Cheap, independent, and each closes a specific checklist item.
+
+\begin{itemize}
+    \item \textbf{Training-step dose--response.} Evaluate trajectory following at intermediate checkpoints, giving independent evidence that training produces the capability. \todo[inline]{Run before any checkpoint housekeeping; the intermediate checkpoints are the raw material.}
+    \item \textbf{Prompt-engineering baseline.} Graded textual smile descriptions on the unmodified backbone, answering the zero-shot objection of \citet{hua2026pixelsmile}.
+    \item \textbf{Out-of-range intensity probe.} Commanded values below zero and above one, as a disentanglement check.
+    \item \textbf{Multi-model identity averaging.} Add ArcFace \citep{deng2019arcface} to the existing embedding model to remove single-estimator dependence.
+    \item \textbf{Perceptual and prompt-fidelity metrics.} \gls{lpips} \citep{zhang2018lpips} and CLIP-based prompt adherence on the generated clips.
+\end{itemize}
+
+\subsection{Writing}\label{subsec:sched-writing}
+
+\todo[inline]{Dissertation chapters, and any paper submission targeted along the way.}
+
+% =====================================================================
+\section{Timetable}\label{sec:sched-timetable}
+
+% Fill in real periods. NOTE: the date currently set in Identificacao.tex is
+% 29 June 2026, which is in the past; fix it to the actual defence date
+% before generating the cover (see NOTES.md).
+%
+% Marks: X = planned. Add or remove columns to match the real calendar.
+
+\begin{table}[H]
+    \centering
+    \caption{Planned schedule for the remaining work.}
+    \label{tab:timetable}
+    \footnotesize
+    \begin{tabular}{@{}lcccccc@{}}
+        \toprule
+        Activity & \multicolumn{6}{c}{Two-month period} \\
+        \cmidrule(l){2-7}
+                 & 1 & 2 & 3 & 4 & 5 & 6 \\
+        \midrule
+        Calibration remedies (retraining)   & X & X &   &   &   &   \\
+        Training-step dose--response         & X &   &   &   &   &   \\
+        Prompt-engineering baseline          & X &   &   &   &   &   \\
+        Out-of-range intensity probe         &   & X &   &   &   &   \\
+        Multi-model identity averaging       &   & X &   &   &   &   \\
+        Perceptual / prompt-fidelity metrics &   & X & X &   &   &   \\
+        Multi-AU extension (if in scope)     &   &   & X & X &   &   \\
+        Consolidated final evaluation        &   &   &   & X & X &   \\
+        Dissertation writing                 & X & X & X & X & X & X \\
+        Revision and defence                 &   &   &   &   & X & X \\
+        \bottomrule
+    \end{tabular}\\[4pt]
+    {\footnotesize Source: prepared by the author.}
+\end{table}
+
+\todo[inline]{Replace the generic periods with real months and confirm the defence deadline with the advisor.}
+
+% =====================================================================
+\section{Risks and Mitigations}\label{sec:sched-risks}
+
+% State these proactively. A proposal that names its own risks reads as
+% better planned than one the banca has to interrogate.
+
+\begin{itemize}
+    \item \textbf{The calibration remedies may not work.} Mitigation: the sequence-native formulation and the measurement protocol stand as contributions independently of whether absolute calibration is achieved; the negative result is itself reportable and diagnosed.
+    \item \textbf{Scope creep across control axes.} Mitigation: treat the multi-AU extension as optional and decide by a fixed date.
+    \item \textbf{Single-dataset generalisation.} Mitigation: state the lab-domain restriction as a scope boundary rather than attempting a new dataset late in the schedule.
+    \item \textbf{Compute limits.} A single consumer GPU against prior art trained on multi-GPU clusters. Mitigation: the frozen-backbone design keeps trainable parameters small; report compute honestly as a constraint of the setup.
+\end{itemize}
+
+% =====================================================================
+\section{Final Remarks}\label{sec:sched-final}
+
+% Close on what the work will have established, phrased consistently with
+% Section~\ref{sec:res-headtohead}: the contribution is the sequence-native
+% formulation of expression intensity plus the measurement protocol, not a
+% claim of superior expression control. Keep this consistent with Cap01;
+% the two chapters are read together.
+
+\todo[inline]{Two or three paragraphs. Write last, and check it agrees with Cap01 word for word on the contribution claim.}

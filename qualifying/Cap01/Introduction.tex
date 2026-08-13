@@ -1,0 +1,116 @@
+\chapter{Introduction}\label{cap:introduction}
+\glsresetall
+
+% =====================================================================
+% SKELETON. Target: 5--7 pages.
+%
+% Narrative arc for this chapter, in order:
+%   1. Controllable facial expression synthesis matters (applications:
+%      affective computing data, avatars, clinical/behavioural stimuli,
+%      training data for FER).
+%   2. Diffusion models made photorealistic face generation routine, but
+%      control over *how much* of an expression is present is still coarse
+%      (text prompts are categorical: "smiling" / "not smiling").
+%   3. Prior art conditions on continuous AU intensity (\citet{varanka2024fineface})
+%      but generates each intensity level as an INDEPENDENT still: nothing
+%      binds identity or scene across the levels, and intensity control is
+%      reported qualitatively.
+%   4. This work reframes expression intensity as a SEQUENCE-level generation
+%      parameter: one text prompt plus a per-frame intensity trajectory
+%      yields a single temporally coherent clip.
+%   5. What was measured so far, honestly (including the negative
+%      calibration result) -> forward-reference to Cap05.
+%
+% Style: impersonal voice, no em-dashes, define every acronym on first use
+% via \gls{}. Keep the detailed method out of here (it belongs in Cap04).
+% =====================================================================
+
+\todo[inline]{Write the motivation: why graded expression intensity control is needed, and for whom.}
+
+% =====================================================================
+\section{Motivation}\label{sec:motivation}
+
+\todo[inline]{2--3 dense paragraphs. Applications first, then why current text conditioning is insufficient.}
+
+% =====================================================================
+\section{Problem Statement}\label{sec:problem}
+
+% The gap, stated so that the banca can see it is real and open. Anchor it
+% in the four papers studied in docs/experiments/2026-07-11-related-work-study.md:
+%   - \citet{varanka2024fineface}: AU-intensity T2I generation, but N
+%     independent stills; no identity metric at all; intensity qualitative.
+%   - \citet{wei2025magicface}: continuous AU control, but EDITING a source
+%     photo, relative (not absolute) targets, full UNet fine-tune.
+%   - \citet{hua2026pixelsmile}: intensity linearity measured, but editing,
+%     unitless alpha, and the same model builds the data and judges results.
+%   - \citet{jiang2024emojidiff}: transfer from an RGB exemplar; cannot take
+%     a numeric intensity as input.
+% None produces identity-consistent intensity *trajectories* in one
+% generated sequence, and none measures commanded-vs-detected intensity with
+% an objective facial-action detector.
+
+\todo[inline]{State the gap. Be precise about what is and is not already in the prior art.}
+
+% =====================================================================
+\section{Research Questions}\label{sec:research-questions}
+
+% Keep to two or three. Each must be answerable by an experiment in Cap05
+% or by the planned work in Cap06.
+
+\noindent\textbf{RQ1}: \todo[inline]{e.g. Can expression intensity be controlled as a per-frame sequence parameter on a frozen text-to-video backbone, such that the detected intensity follows the commanded trajectory?}
+
+\noindent\textbf{RQ2}: \todo[inline]{e.g. Does generating the intensity levels as one sequence, rather than as independent stills, improve identity consistency across levels?}
+
+\noindent\textbf{RQ3}: \todo[inline]{e.g. Is the resulting control absolute (calibrated to AU intensity units) or only relative/ordinal, and what causes the difference?}
+
+% =====================================================================
+\section{Objectives}\label{sec:objectives}
+
+\subsection{General Objective}\label{subsec:general-objective}
+
+\todo[inline]{One paragraph. Should read as a single sentence of intent, matching the title.}
+
+\subsection{Specific Objectives}\label{subsec:specific-objectives}
+
+\begin{itemize}
+    \item \todo[inline]{Adapt the camera-parameter conditioning mechanism of \citet{yuan2024genphoto} to a facial-expression intensity axis.}
+    \item \todo[inline]{Build continuous per-frame AU12 supervision from video (\gls{mead}).}
+    \item \todo[inline]{Define an evaluation protocol measuring ramp-following, absolute calibration and cross-frame identity.}
+    \item \todo[inline]{Compare head-to-head against the closest prior art under matched prompts.}
+    \item \todo[inline]{Characterise the failure modes (calibration, demographic bias, non-monotonic trajectories).}
+\end{itemize}
+
+% =====================================================================
+\section{Hypotheses}\label{sec:hypotheses}
+
+% Each hypothesis gets an explicit supported/refuted verdict in Cap05.
+% H3 as written below is ALREADY REFUTED by the 2026-07-14 calibration
+% experiment; keeping a refuted hypothesis and reporting it honestly is
+% stronger than quietly deleting it. Discuss the framing with the advisor.
+
+\begin{itemize}
+    \item \textbf{H1}: \todo[inline]{Sequence-level conditioning yields detected intensity that correlates with the commanded trajectory.}
+    \item \textbf{H2}: \todo[inline]{Temporal attention preserves identity across intensity levels better than independent per-level generation.}
+    \item \textbf{H3}: \todo[inline]{Control is absolute, i.e. a commanded value maps to the same detected intensity regardless of context. NOTE: refuted by the calibration experiment; see Cap05.}
+\end{itemize}
+
+% =====================================================================
+\section{Contributions}\label{sec:contributions}
+
+% Claim only what survives the FineFace head-to-head
+% (docs/experiments/2026-07-21-fineface-headtohead.md):
+%   - ramp-following is a TIE with FineFace, not a win;
+%   - FineFace BEATS this work on absolute calibration;
+%   - this work wins cross-frame identity, modestly.
+% The defensible contribution is therefore the sequence-native formulation
+% plus the measurement protocol, NOT better expression control. Any
+% "first AU-conditioned generation" phrasing is dead: FineFace (July 2024)
+% has primacy. Also avoid "fine-grained" as a headline term, since three of
+% the four related papers use it with different meanings.
+
+\todo[inline]{List 3--4 contributions, each phrased so that Cap05 or Cap06 demonstrably delivers it.}
+
+% =====================================================================
+\section{Document Organization}\label{sec:organization}
+
+\todo[inline]{One short paragraph mapping Chapters~\ref{cap:background} to \ref{cap:schedule}. Write last.}

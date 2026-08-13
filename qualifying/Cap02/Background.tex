@@ -1,0 +1,125 @@
+\chapter{Background}\label{cap:background}
+\glsresetall
+
+% =====================================================================
+% SKELETON. Target: 12--18 pages.
+%
+% Purpose: give the banca exactly the machinery needed to read Cap04, and
+% nothing more. Every section here must be load-bearing for the method or
+% the evaluation. If a section does not get referenced later, cut it.
+%
+% Verb tense for literature review: simple present ("X proposes Y").
+% =====================================================================
+
+\todo[inline]{Opening paragraph: announce the chapter's contents in the order they appear.}
+
+% =====================================================================
+\section{Diffusion Models}\label{sec:bg-diffusion}
+
+% Forward/reverse process, the noise-prediction objective, and why latent
+% space matters for tractability. Keep the derivation minimal: state the
+% training objective and move on.
+%   \citep{ho2020ddpm}      -- DDPM, forward/reverse formulation
+%   \citep{song2021ddim}    -- deterministic sampling, fewer steps
+%   \citep{rombach2022ldm}  -- latent diffusion / Stable Diffusion, the backbone here
+
+\todo[inline]{Forward and reverse process, the simplified objective, latent-space formulation.}
+
+% =====================================================================
+\section{Conditioning Mechanisms in Text-to-Image Diffusion}\label{sec:bg-conditioning}
+
+% This is the section Cap04 depends on most. Cover, in this order:
+%   1. Text conditioning via cross-attention with a CLIP text encoder
+%      \citep{radford2021clip}; why it is categorical rather than continuous.
+%   2. Classifier-free guidance \citep{ho2022cfg} and its use on a
+%      non-text condition.
+%   3. Adapter-style injection on a FROZEN backbone: ControlNet
+%      \citep{zhang2023controlnet}, IP-Adapter \citep{ye2023ipadapter},
+%      LoRA \citep{hu2022lora}. Establish the vocabulary of "decoupled
+%      cross-attention" and "zero-initialised merge", both used in Cap04.
+
+\todo[inline]{Cross-attention text conditioning, CFG, and adapter-based control on frozen backbones.}
+
+% =====================================================================
+\section{Temporal Generation and Motion Modules}\label{sec:bg-temporal}
+
+% The mechanism that makes this work's claim possible: a motion module
+% inserted into a 2D UNet turns it into a 3D UNet whose temporal attention
+% binds the frames of one clip to a shared identity and scene.
+%   \citep{guo2024animatediff} -- AnimateDiff motion module
+% Make explicit the point the whole contribution rests on: with temporal
+% attention, the frames of a clip are generated JOINTLY, whereas N
+% independent stills share only a random seed.
+
+\todo[inline]{Motion modules, temporal attention, and why joint generation differs from independent stills.}
+
+% =====================================================================
+\section{Parametric Control of Generative Cameras}\label{sec:bg-genphoto}
+
+% The direct antecedent, presented here as background rather than as
+% related work because the method in Cap04 reuses its mechanism verbatim.
+%   \citep{yuan2024genphoto}
+% Cover: the 6-channel physical conditioning layout, the contrastive camera
+% learning (\gls{ccl}) text encoding that represents *change between frames*,
+% and the zero-initialised merge into temporal attention.
+
+\todo[inline]{GenPhoto's camera-parameter conditioning: physical channel embedding, CCL, merge weights.}
+
+% =====================================================================
+\section{Facial Expression Representation}\label{sec:bg-facs}
+
+% \gls{facs} \citep{ekman1978facs}: anatomically grounded, per-AU, and
+% crucially INTENSITY-GRADED, which is what makes a continuous control axis
+% meaningful. Justify the choice of AU12 (lip-corner puller) as the single
+% axis studied here: unambiguous, high dynamic range, reliably detectable.
+% Mention the pre-diffusion lineage of AU-conditioned synthesis
+% \citep{pumarola2018ganimation, choi2018stargan}.
+
+\todo[inline]{FACS, action units, intensity coding, and the rationale for AU12 as the control axis.}
+
+% =====================================================================
+\section{Automatic Action Unit Estimation}\label{sec:bg-au-estimation}
+
+% These tools are both the source of training labels and the measuring
+% instrument, so their properties are part of the method's validity.
+%   \citep{cheong2023pyfeat}      -- py-feat, used for labels AND evaluation
+%   \citep{lugaresi2019mediapipe} -- MediaPipe blendshapes, independent check
+%   \citep{chang2024libreface}    -- LibreFace, used by the prior art
+%
+% IMPORTANT: introduce the circularity problem HERE (same estimator produces
+% labels and scores results), so that Cap04's mitigation reads as a designed
+% choice rather than a defensive afterthought. All four related papers share
+% this circularity without flagging it; this work flags and mitigates it.
+
+\todo[inline]{AU estimators, their disagreement, and the label/evaluation circularity problem.}
+
+% =====================================================================
+\section{Datasets for Expression Intensity}\label{sec:bg-datasets}
+
+% \gls{mead} \citep{wang2020mead}: multi-view, emotion-labelled, three
+% discrete intensity levels, lab conditions. Explain what is extracted here
+% that the discrete levels do not give: continuous per-frame AU12 from the
+% onset-to-apex ramp of each clip.
+% Contrast with the still-image AU datasets used by the prior art:
+% DISFA \citep{mavadati2013disfa}, AffectNet \citep{mollahosseini2019affectnet}.
+% Note the known consequence of lab-only training data (domain look,
+% demographic bias) -- it comes back as a limitation in Cap05.
+
+\todo[inline]{MEAD, what continuous supervision is extracted from it, and the cost of lab-only data.}
+
+% =====================================================================
+\section{Evaluation Metrics}\label{sec:bg-metrics}
+
+% Define each metric once, here, then only reference it in Cap04/Cap05.
+%   - Pearson r between commanded and detected intensity (ramp following).
+%   - \gls{cls}, the control-linearity protocol of \citet{hua2026pixelsmile}:
+%     uniformly spaced commanded intensities, correlation against detected.
+%   - Face-embedding cosine for identity \citep{deng2019arcface,
+%     schroff2015facenet, cao2018vggface2}.
+%   - \gls{lpips} \citep{zhang2018lpips} and CLIP-based prompt fidelity.
+%   - Note that Pearson r is invariant to scale and offset, which is exactly
+%     why an absolute-error metric is also required. This distinction is what
+%     separates "follows the ramp" from "is calibrated", and it is the
+%     central measurement point of Cap05.
+
+\todo[inline]{Define ramp correlation, CLS, identity cosine, and perceptual metrics. Stress the r-vs-absolute-error distinction.}
