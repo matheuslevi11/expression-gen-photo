@@ -41,5 +41,8 @@ exports/
 # Vendored competitor forks (each has its own git repo; see docs/experiments)
 forks/
 
+# LibreFace model weights (downloaded on first use; independent AU cross-check)
+weights_libreface/
+
 # Other
 .ai-jail
