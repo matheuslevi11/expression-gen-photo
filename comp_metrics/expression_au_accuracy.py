@@ -69,6 +69,51 @@ def detect_au12(detector, frames: Sequence[np.ndarray]) -> List[float]:
     return out
 
 
+def detect_all_aus(detector, frames: Sequence[np.ndarray]) -> "dict[str, List[float]]":
+    """Detect the FULL py-feat AU set per frame → ``{AU_name: [per-frame values]}``.
+
+    Sibling of :func:`detect_au12` with two deliberate differences:
+
+    * it returns every AU in ``detector.info['au_presence_columns']`` (20 AUs for
+      ``au_model='xgb'``: AU01,02,04,05,06,07,09,10,11,12,14,15,17,20,23,24,25,26,28,43);
+    * it **preserves NaN** on a no-face / non-finite frame instead of coercing to 0.0.
+      A 0.0 floor (as in ``detect_au12``) would bias near-flat AUs downward and can
+      manufacture spurious correlations against a ramp; downstream aggregation masks NaN.
+
+    ``detect_au12`` is intentionally left unchanged so the published AU12 numbers stay
+    bit-reproducible. NOTE: py-feat ``xgb`` outputs are AU *presence probabilities* in
+    ``[0, 1]``, not FACS A--E intensities; use for ordering/correlation, not absolute scale.
+    """
+    import tempfile
+    import os
+
+    au_names = list(detector.info.get("au_presence_columns", []))
+    out: "dict[str, List[float]]" = {au: [] for au in au_names}
+    for rgb in frames:
+        vals = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp_path = tmp.name
+            Image.fromarray(rgb).save(tmp_path)
+            df = detector.detect_image(tmp_path)
+            os.unlink(tmp_path)
+            if len(df) > 0:
+                row = df.iloc[0]
+                vals = {}
+                for au in au_names:
+                    if au in df.columns:
+                        v = float(row[au])
+                        vals[au] = float(np.clip(v, 0.0, 1.0)) if np.isfinite(v) else float("nan")
+                    else:
+                        vals[au] = float("nan")
+        except Exception as e:  # noqa: BLE001
+            log.debug("py-feat all-AU failed on a frame (%s); using NaN", e)
+            vals = None
+        for au in au_names:
+            out[au].append(float("nan") if vals is None else vals.get(au, float("nan")))
+    return out
+
+
 def correlation(detected: Sequence[float], target: Sequence[float]) -> float:
     if len(detected) != len(target) or len(target) < 2:
         return float("nan")
