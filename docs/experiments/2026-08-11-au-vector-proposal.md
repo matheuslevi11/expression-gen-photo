@@ -92,3 +92,16 @@ embedding only … no multi-AU control yet"* and *"Single emotion filter … mul
 a follow-up."* This note records the **why-not-yet** and the **correct framing** so the
 item is actionable rather than aspirational. Backlog row added to the `status.md`
 Experiment log (2026-08-11).
+
+## Empirical update (2026-08-25): co-activation strengthens the case
+
+The AU co-activation analysis ([[2026-08-25-au-coactivation]]) gives this proposal an
+empirical spine. The single AU12 axis does **not** control AU12 in isolation: it drives the
+whole MEAD-happy covariance (AU06/AU25/AU10 up, AU23/24/17/15 down, subtle brow entanglement
+that py-feat underreports but LibreFace + geometry reveal). The prior-art contrast is the
+key datum: **FineFace's independent 12-AU control localizes cleanly** (AU01 leakage 0.017 vs
+our 0.337; AU23 +0.18 vs our −0.72) where our scalar axis inherits the full expression
+prior. So multi-AU control is not just "richer" — it is what would let the model
+**decouple** axes the current formulation entangles. Note this does not change the §1 data
+blocker: exercising non-smile AUs still requires multi-emotion MEAD (happy-only gives no
+variance on the very AUs the co-activation analysis shows moving as a locked cluster).
