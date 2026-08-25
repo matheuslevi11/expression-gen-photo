@@ -12,33 +12,30 @@ components are frozen and which are trained; Section~\ref{sec:method-conditionin
 describes how a scalar expression intensity is encoded and injected into the backbone;
 Sections~\ref{sec:method-data} and~\ref{sec:method-training} cover the training data and
 setup; Section~\ref{sec:method-evaluation} defines the evaluation protocol; and
-Section~\ref{sec:method-baselines} lists the baselines. Throughout, components that are
-built and verified are distinguished from those that are planned, the latter scheduled in
-Chapter~\ref{cap:schedule}. Every quantitative claim traces to a dated entry in the
-project experiment log.
+Section~\ref{sec:method-baselines} lists the baselines.
 
 % =====================================================================
 \section{Overview}\label{sec:method-overview}
 
-\noindent\textbf{Task.} Let a \emph{clip} denote a sequence of $F$ frames that share one
+\noindent\textbf{Task.} Let a \emph{clip} denote a sequence of $F=5$ frames that share one
 identity and scene. Given a text prompt $p$ and a per-frame intensity trajectory
 $(s_1,\dots,s_F)$ with each $s_t \in [0,1]$, the method generates a single clip in which
-the detected intensity of the lip-corner-puller action unit (AU12, a common smile proxy)
-in frame $t$ tracks $s_t$. The closest prior art \citep{varanka2024fineface} instead
-produces the $F$ intensity levels as \emph{independent} images that share only a random
-seed; binding identity and scene across the trajectory by construction is the
-distinguishing property of this formulation, and $F=5$ throughout this work.
+the detected intensity of a given action unit in frame $t$ tracks $s_t$; this work
+instantiates the axis with AU12.
+Because the proxy unit co-varies with its expression in the training data, the axis
+controls a graded expression rather than an isolated muscle action. FineFace \citep{varanka2024fineface} instead produces the $F$ intensity levels as \emph{independent} images that share only a random seed; binding identity and scene across the trajectory by construction is the distinguishing property of this formulation.
 
 The system reuses the camera-parameter conditioning architecture of Generative Photography
-\citep{yuan2024genphoto} unchanged, substituting a scalar expression-intensity axis for
+\citep{yuan2024genphoto}, substituting a scalar expression-intensity axis for
 its camera axis. A frozen \gls{t2v} backbone, Stable Diffusion~1.5 (SD1.5)
 \citep{rombach2022ldm} extended with an AnimateDiff motion module
 \citep{guo2024animatediff}, supplies identity and scene coherence across frames through
 temporal attention. A small trainable expression encoder converts the intensity
 trajectory into a six-channel spatial conditioning tensor, which is merged into that
 temporal attention through a set of zero-initialised weights.
-Figure~\ref{fig:system} shows the pipeline and colour-codes the frozen and trainable
-components.
+Figure~\ref{fig:system} shows a pipeline overview.
+
+% TODO: Trabalhar em consertar essa figura
 
 \begin{figure}[t]
 \centering
@@ -72,37 +69,29 @@ components.
 \end{tikzpicture}%
 }
 \caption[System overview.]{System overview. The intensity trajectory is encoded into a
-six-channel conditioning tensor and merged into the temporal attention of a frozen
-SD1.5~+~AnimateDiff backbone through zero-initialised weights. Only the expression encoder
-and the merge weights are trained (orange); the backbone, VAE, CLIP text encoder and
-motion module are frozen (blue).}
+six-channel conditioning tensor and merged into the temporal attention of a frozen backbone. Only the expression encoder and the merge weights are trained (orange); the backbone, VAE, CLIP text encoder and motion module are frozen (blue).}
 \label{fig:system}
 \end{figure}
 
 % =====================================================================
 \section{Backbone and Trainable Components}\label{sec:method-backbone}
 
-The backbone is inherited whole and kept frozen: the SD1.5 UNet (in the merged
-\texttt{unet\_merged} configuration), the \gls{vae}, the CLIP text encoder
+The backbone is inherited whole and kept frozen: the SD1.5 UNet, the \gls{vae}, the CLIP text encoder
 \citep{radford2021clip}, the AnimateDiff motion module \citep{guo2024animatediff}, and a
 rank-2 RealEstate10K \gls{lora} \citep{hu2022lora} that is part of the released backbone.
 Only two components are trained: the \emph{expression encoder} and the attention
-\texttt{merge} weights that inject its output into the UNet. The implementation sets the
-spatial attention processors trainable and then re-freezes every parameter whose name
-contains \texttt{lora} (\texttt{train\_expression.py:204--209}), so the \gls{lora} layers
-are a frozen backbone component and are \emph{not} adapted, contrary to the earlier design
-sketch. Table~\ref{tab:method-components} lists the components and the trainable parameter
+merge weights that inject its output into the UNet. The implementation sets the
+spatial attention processors trainable and then re-freezes every parameter related to LoRA, so those layers are a frozen backbone component and are not adapted. Table~\ref{tab:method-components} lists the components and the parameter
 counts.
 
+% TODO: Adaptar essa tabela para mostrar o número de parâmetros em todas as linhas
 \begin{table}[t]
 \centering
-\caption{Frozen and trainable components. Parameter counts verified against the running
-model on 2026-05-21. The 218\,M trainable budget is roughly $8\times$ smaller than the
-fully fine-tuned UNet of the editing prior art \citep{wei2025magicface}.}
+\caption{Number of parameters in frozen and trainable components.}
 \label{tab:method-components}
 \begin{tabular}{llr}
 \toprule
-Component & Role & Trainable params \\
+Component & Role & Number of params \\
 \midrule
 SD1.5 UNet3D (\texttt{unet\_merged}) & frozen backbone & --- \\
 \gls{vae} & frozen & --- \\
@@ -118,57 +107,33 @@ Attention \texttt{merge} weights & \textbf{trained} & \phantom{0}18.96\,M \\
 \end{tabular}
 \end{table}
 
-The compute is stated plainly: a single NVIDIA RTX~3090 (24\,GB) trained for 100k steps.
-Keeping the backbone frozen and training only a 218\,M adaptor is what makes this budget
-sufficient, and is a deliberate strength of the proposal rather than a limitation to be
-hidden.
-
 % =====================================================================
 \section{Expression Conditioning}\label{sec:method-conditioning}
 
 \subsection{Intensity Embedding}\label{subsec:method-embedding}
 
 Generative Photography conditions the backbone on a six-channel spatial tensor of shape
-$[F, 6, H, W]$ whose first three channels carry a \emph{physical} signal (for a camera
-parameter, a blur footprint, a crop mask, or an exposure scale) and whose last three carry
-a text-derived change signal (Section~\ref{subsec:method-ccl}). The encoder input width is
-therefore \texttt{cin}~$=384 = 6 \times 8^2$ for a downscale factor of $8$, and this work
-keeps that layout unchanged so the rest of the architecture is reused verbatim.
+$[F, 6, H, W]$ whose first three channels carry a \emph{physical} signal and whose last three carry a text-derived change signal (Section~\ref{subsec:method-ccl}).
 
 For expression intensity there is no physical rendering to place in the first three
 channels. The scalar intensity $s_t$ of each frame is instead broadcast spatially to a
-constant $[F, 3, H, W]$ map (\texttt{create\_intensity\_embedding} in
-\texttt{expression\_dataset.py}), which is the direct analogue of the way Generative
-Photography encodes a scalar parameter such as shutter speed: spatially uniform, varying
-only across frames. This scalar-broadcast design, referred to as \emph{Option A} following
-\texttt{docs/plan.md}, is the minimal formulation that fits the inherited layout without
+constant $[F, 3, H, W]$ map. This scalar-broadcast design fits the inherited layout without
 architectural change; spatially structured alternatives such as a landmark-displacement
 map or a multi-dimensional \gls{au} vector are discussed as future work in
 Chapter~\ref{cap:schedule}. Frames are rendered at $H\times W = 256\times384$.
-
+% TODO: I don't think this subsection title
 \subsection{Change Encoding in the Text Branch}\label{subsec:method-ccl}
 
+% TODO: Change the CCL term to expression instead of camera
 The last three channels carry the \gls{ccl} signal, which encodes the direction and
 magnitude of change \emph{between} consecutive frames. For each frame a prompt of the form
-\texttt{<smile intensity: 0.250>} is formed and encoded with the frozen CLIP text encoder;
-the per-frame CLIP hidden states are then differenced, frame $i$ minus frame $i-1$, with
-the final entry set to the last-minus-first difference
-(\texttt{build\_ccl\_embedding}). The resulting $[F, 77, 768]$ difference tensor is padded
-to $[F, 128, 768]$ and reshaped to $[F, 256, 384]$, matching $H\times W$, then broadcast
-across the three channels. This differs from Generative Photography only in the prompt
-vocabulary (its templates read \texttt{<bokeh kernel size: \dots>} and the like). The
-between-frames semantics are what make this signal specific to the sequence formulation:
-a difference of consecutive-frame text embeddings is meaningful only when the frames form
-one ordered trajectory, and has no counterpart in the single-image setting of the prior
-art.
-
+\texttt{<smile intensity: 0.25>} is formed and encoded with the frozen CLIP text encoder;
+the per-frame CLIP hidden states are then differenced, frame $i$ minus frame $i-1$. The resulting difference tensor is padded to match the shape of the generated image, then broadcast across the three channels. The between-frames semantics are what make this signal specific to the sequence formulation: a difference of consecutive-frame text embeddings is meaningful only when the frames form one ordered trajectory, and has no counterpart in the single-image setting of the prior art.
+% This whole section is shit, let's see if we rewrite or get rid of it
 \subsection{Injection into Temporal Attention}\label{subsec:method-merge}
 
 The encoder output is merged into the backbone through a set of \emph{merge} weights added
-to the temporal-attention path, and these weights are zero-initialised. This has a
-consequence worth stating explicitly: with no adaptor checkpoint loaded, the merge
-contributes exactly zero and the model is bit-identical to the unmodified backbone. That
-equivalence was verified on 2026-07-09, where running the frozen backbone through the
+to the temporal-attention path. This has a consequence worth stating explicitly: with no adaptor checkpoint loaded, the merge contributes exactly zero and the model is bit-identical to the unmodified backbone. That equivalence was verified on 2026-07-09, where running the frozen backbone through the
 conditioning code path with zero-initialised merge weights produced output bit-identical
 to bypassing the conditioning entirely. It is what makes the ablation baseline of
 Section~\ref{sec:method-baselines} \emph{provably} fair: the baseline is not a separate
@@ -176,22 +141,15 @@ model but the same model with its trained contribution set to zero.
 
 % =====================================================================
 \section{Training Data}\label{sec:method-data}
-
+% TODO: Review the underline text
 Training data is derived from the front-view \emph{happy} clips of \gls{mead}
 \citep{wang2020mead}. Faces are cropped with MediaPipe \citep{lugaresi2019mediapipe}, and
-each frame is labelled with a continuous AU12 intensity from py-feat
+each frame is labelled with a continuous AU intensity from py-feat
 \citep{cheong2023pyfeat}. Raw \gls{mead} provides three discrete intensity levels per
-clip; the dataset composes onset-to-apex monotonic \emph{ramps} of $F$ frames from sorted
-frames, so that a clip's frames increase in expression intensity. The split contains
-4{,}028 training and 176 validation clips. It is a clean actor holdout: the two validation
-identities (\gls{mead} actors W009 and W011) do not appear in training, so there is no
-identity leakage into the validation signal; both held-out actors are female.
-
-Two properties of this data are stated here because they shape the results in
-Chapter~\ref{cap:preliminary-results}. First, the training clips are ramps only, that is,
-onset-to-apex trajectories; the model therefore sees expression intensity only as a
-quantity that increases through a clip, and this is the root cause of the
-relative-not-absolute calibration result in Section~\ref{sec:res-calibration}. Second,
+clip; \underline{the dataset composes onset-to-apex monotonic \emph{ramps} of $F$ frames from sorted frames}, so that a clip's frames increase in expression intensity. The split contains
+4{,}028 training and 176 validation clips. The validation identities do not appear in training, to ensure there isn't an identity leakage into the validation signal.
+% TODO: Review this section. I don't think the calibration results should be mentioned here
+The training clips are ramps only, that is, onset-to-apex trajectories; the model therefore sees expression intensity only as a quantity that increases through a clip, and this is the root cause of the relative-not-absolute calibration result in Section~\ref{sec:res-calibration}. Second,
 \gls{mead} happy clips carry substantial AU12 even at their lowest labelled level, which
 biases the low end of the intensity range upward. Crucially, none of this data enters the
 evaluation loop: all reported results are generated from a text-prompt bank and scored by
@@ -200,7 +158,7 @@ clips influence only the learned weights, never a reported metric.
 
 % =====================================================================
 \section{Training Setup}\label{sec:method-training}
-
+% TODO: Extract the parameters to a table instead of parenthesis in the middle of the text
 The training objective is the standard denoising-diffusion loss \citep{ho2020ddpm}: with
 the backbone frozen, the expression encoder and merge weights are optimised to predict the
 noise added to the encoded video latents, conditioned on the prompt and the six-channel
@@ -212,19 +170,9 @@ $19$\,GB on the RTX~3090. Training runs for 100k steps, checkpointing every 1{,}
 and sampling validation clips every 5{,}000 steps (capped at 8 clips), with a fixed seed
 of $42$.
 
-One provenance detail is reported for honesty and reproducibility. The 100k-step run is
-not a single continuous optimisation: an initial run was stopped manually at step 23{,}250
-and then resumed to completion from step 23{,}000. The resume restores the encoder and
-merge weights and the global step counter, but the optimiser state, though saved in the
-checkpoint, is not reloaded (\texttt{train\_expression.py:321--335} against \texttt{:457});
-the AdamW moment estimates and the learning-rate schedule therefore reset at the resume.
-The practical effect is expected to be small, since the loss was already low and stationary
-by step 23{,}000 and the moments re-warm within a short interval, but the run should not be
-described as a single clean optimiser trajectory.
-
 % =====================================================================
 \section{Evaluation Protocol}\label{sec:method-evaluation}
-
+% TODO: This section needs to be rewritten, it's not on scientific language
 The evaluation is itself a contribution, because none of the four closest works
 \citep{varanka2024fineface, wei2025magicface, hua2026pixelsmile, jiang2024emojidiff}
 measures all three of the axes below, and all four score expression with the same detector
@@ -235,14 +183,13 @@ with three seeds ($42,43,44$), at 25 denoising steps and classifier-free guidanc
 \citep{ho2022cfg} scale $8.0$.
 
 \subsection{Trajectory Following}\label{subsec:eval-ramp}
-
+% TODO: This section needs to be refined
 The first question is whether the detected intensity follows the commanded trajectory. An
 ascending ramp $(0, 0.25, 0.5, 0.75, 1.0)$ is commanded, the generated frames are scored
 with py-feat, and the Pearson correlation $r$ between the commanded per-frame intensity and
 the detected AU12 intensity is reported, aggregated over the prompt bank and seeds
 ($n=120$). A high $r$ says the model orders and spaces the frames as commanded; because
-Pearson $r$ is invariant to scale and offset (Section~\ref{sec:bg-metrics}), it measures
-following, not calibration, which motivates the next axis.
+Pearson $r$ is invariant to scale and offset, it measures following, not calibration, which motivates the next axis.
 
 \subsection{Absolute Calibration}\label{subsec:eval-calibration}
 
@@ -289,19 +236,14 @@ signal.
 
 \begin{itemize}
     \item \textbf{Frozen backbone.} The same backbone with the same seed and no expression
-    conditioning, provably identical to the unmodified backbone by the zero-initialisation
-    argument of Section~\ref{subsec:method-merge}. It isolates the effect of the trained
-    adaptor.
-    \item \textbf{Prior art, matched prompts.} \citet{varanka2024fineface} run as
+    conditioning. It isolates the effect of the trained adaptor.
+    % TODO: Think about better framing this
+    \item \textbf{FineFace with matched prompts.} \citet{varanka2024fineface} run as
     independent stills over the same prompts and intensity levels. This is the comparison
     that isolates the sequence-native claim, since it differs from the proposed method
     precisely in whether the levels are bound into one clip.
-    \item \textbf{Prompt engineering.} Graded textual descriptions of smile intensity on
-    the unmodified backbone, answering the ``why not just prompt it?'' objection raised by
-    the zero-shot result of \citet{hua2026pixelsmile}. This baseline is planned, not yet
-    run; see Chapter~\ref{cap:schedule}.
 \end{itemize}
-
+% TODO: Rewrite
 Inference is seed-locked: the sampler is re-seeded immediately before generation, so the
 same seed and configuration yield bit-identical outputs, and ablations that differ only in
 construction-time random draws remain directly comparable. This is what allows the frozen

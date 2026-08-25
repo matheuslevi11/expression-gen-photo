@@ -60,13 +60,11 @@
 \noindent\textbf{Task formulation.} Let a \emph{clip} denote a sequence of $F$ frames
 that share one identity and scene. Given a text prompt and a per-frame intensity
 trajectory $(s_1,\dots,s_F)$ with each $s_t \in [0,1]$, the objective is to generate a
-single clip in which the detected intensity of the lip-corner-puller action unit (AU12,
-a common smile proxy) in frame $t$ tracks $s_t$. Prior conditional-generation methods
-instead render each intensity level as an independent image. The three research questions
-below ask, in turn, whether this trajectory-following is achievable on a frozen
-\gls{t2v} backbone (RQ1), whether generating the trajectory jointly as one sequence
-benefits cross-level identity (RQ2), and whether the resulting control is absolute or
-relative to the commanded trajectory (RQ3). This formulation is restated and made precise
+single clip in which the detected intensity of a given action unit in frame $t$ tracks
+$s_t$. This work instantiates the axis with AU12 (lip-corner puller), a proxy for smile
+intensity. 
+
+Prior conditional-generation methods instead render each intensity level as an independent image. The three research questions below ask, in turn, whether this trajectory-following is achievable on a frozen \gls{t2v} backbone (RQ1), whether generating the trajectory jointly as one sequence benefits cross-level identity (RQ2), and whether the resulting control is absolute or relative to the commanded trajectory (RQ3). This formulation is restated and made precise
 in Chapter~\ref{cap:method}, Section~\ref{sec:method-overview}.
 
 \medskip
@@ -122,7 +120,7 @@ property of the training data determines which?
     same detected intensity regardless of the surrounding trajectory. \emph{Refuted}
     (Section~\ref{sec:res-calibration}): the same commanded value renders at different
     detected intensities depending on the trajectory in which it appears. The cause is
-    traced to ramp-only video supervision, which is precisely what makes RQ3 worth asking.
+    traced to ramp-only video supervision.
 \end{itemize}
 
 % =====================================================================

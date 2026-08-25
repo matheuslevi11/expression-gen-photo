@@ -130,26 +130,24 @@ citations. Build artifacts are gitignored via `qualifying/.gitignore` (including
 
 1. **The date is in the past.** `Identificacao.tex` says `June 29, 2026`, but today
    is 2026-08-11. Set the real defence date before generating a cover.
-2. **Third committee member.** `\memberC` is empty (so it is omitted from the
-   committee list) while `\filiationC` is filled in. Fill in the name or clear both.
-3. **Is a Portuguese `Resumo` required** for an English-language proposal at PPGI?
+2. **Is a Portuguese `Resumo` required** for an English-language proposal at PPGI?
    Both `Abstract` (EN, first) and `Resumo` (PT) are currently included, which is the
    usual arrangement. If PPGI doesn't require it, delete `Cap00/Resumo.tex` and the
    `\resumo` call in `main.tex`.
-4. **Verify the bibliography.** Entries marked `% VERIFY` in `Ref/references.bib`
+3. **Verify the bibliography.** Entries marked `% VERIFY` in `Ref/references.bib`
    were entered from memory. The five related-work entries and the GenPhoto entry
    came from the actual PDFs in `related_work/` and the fork README, so those are
    sound. Everything else needs a check against DBLP or the publisher — venues,
    pages, full author lists.
-5. **Keep the refuted hypothesis?** `Cap01`'s H3 (absolute calibration) is already
+4. **Keep the refuted hypothesis?** `Cap01`'s H3 (absolute calibration) is already
    refuted by the 2026-07-14 experiment. Reporting a refuted hypothesis honestly is
    the stronger move, but the framing is worth agreeing with your advisor.
-6. **Scope of the calibration remedies** (`Cap06`): in scope for the dissertation, or
+5. **Scope of the calibration remedies** (`Cap06`): in scope for the dissertation, or
    stated as a limitation? This is the biggest open scope question, and it drives the
    timetable, since it needs retraining.
-7. **`\genexpr` in `macros.tex`** is a placeholder name for the method. Decide what
+6. **`\genexpr` in `macros.tex`** is a placeholder name for the method. Decide what
    the system is called, or drop the macro.
-8. **`qualifying/` is untracked in git.** Commit it once you're happy with the
+7. **`qualifying/` is untracked in git.** Commit it once you're happy with the
    scaffold, so there's a real undo path from here on.
 
 ## Deferred, not forgotten
