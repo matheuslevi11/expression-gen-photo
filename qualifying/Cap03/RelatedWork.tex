@@ -14,7 +14,16 @@
 % problems, and that none solves the one posed in Chapter~\ref{cap:introduction}.
 % =====================================================================
 
-\todo[inline]{Opening paragraph: the three task formulations (transfer, editing, generation) and where this work sits.}
+The systems closest to this work solve three different problems, and none solves the one posed
+in Chapter~\ref{cap:introduction}. Expression \emph{transfer} copies the expression of a
+reference image onto a target identity (Section~\ref{sec:rw-transfer}); expression
+\emph{editing} modifies the expression of a given source image (Section~\ref{sec:rw-editing});
+and expression-conditioned \emph{generation} synthesises a face from text under an action-unit
+condition, with no source image (Section~\ref{sec:rw-fineface}). This chapter is organised by
+these three formulations rather than chronologically, because the distinction between them is
+what locates the gap this work fills: a numeric, per-frame intensity axis that yields a single
+identity-consistent clip. The closest generation system, FineFace \citep{varanka2024fineface},
+is prior art for action-unit-conditioned generation and is treated as such throughout.
 
 % =====================================================================
 \section{Expression Transfer from an Exemplar}\label{sec:rw-transfer}
@@ -29,7 +38,20 @@
 % dependence on third-party detector accuracy) applies to this work and
 % should be acknowledged and answered in Cap04.
 
-\todo[inline]{EmojiDiff: mechanism, why exemplar conditioning is not a numeric control axis.}
+EmojiDiff \citep{jiang2024emojidiff} performs expression transfer with strong identity
+preservation. Its control signal is an RGB \emph{exemplar}: a masked face region is CLIP-encoded
+and injected into a frozen Stable Diffusion~1.5 through IP-Adapter-style decoupled
+cross-attention \citep{ye2023ipadapter}, while identity is carried by a separate reference photo,
+and an ArcFace identity loss \citep{deng2019arcface} is applied to one-step latent decodes. The
+training data is manufactured: a base adaptor generates roughly 100k cross-identity expression
+triplets by face-swapping about 10k in-house images.
+
+EmojiDiff is adjacent to this work rather than competing with it. Its interface cannot accept a
+numeric command such as ``smile $=0.5$'': a user must supply an exemplar image for every
+intensity level, and there is no notion of an ordered trajectory or of a sequence generated as
+one clip. It does, however, raise the standard objection to signal-conditioned methods -- loss
+of fine detail and dependence on a third-party detector's accuracy -- which applies to this work
+and is answered by the independent-detector evaluation of Section~\ref{sec:method-evaluation}.
 
 % =====================================================================
 \section{Expression Editing of a Source Image}\label{sec:rw-editing}
@@ -46,7 +68,18 @@
 % far more trainable parameters.
 % Their lab-vs-wild ablation predicts this work's lab-domain artifacts.
 
-\todo[inline]{MagicFace: relative AU vectors, full fine-tune, and what "relative" costs at inference.}
+MagicFace \citep{wei2025magicface} is the closest system in control \emph{semantics}: it
+conditions on a continuous twelve-dimensional action-unit vector on a Stable Diffusion backbone.
+Two design choices set it apart from this work. First, its condition is a \emph{relative} AU
+\emph{variation} (target minus source), injected through a single linear layer added to the time
+embedding, so the target expression is specified as a change from the source; at inference this
+requires estimating the source image's action units first. Second, it \emph{fully} fine-tunes
+the denoising UNet and adds a UNet-sized copy as an identity encoder -- an order of magnitude
+more trainable parameters than the adaptor of Chapter~\ref{cap:method} -- trained on tens of
+thousands of same-identity pairs. It edits a given image rather than generating from text, and
+each edited image is independent, with no temporal mechanism. Its own lab-versus-wild ablation,
+in which a model trained on lab-recorded faces fails to generalise to natural images,
+anticipates the domain-shift limitation reported in Section~\ref{sec:res-threats}.
 
 \subsection{Intensity as a Text-Embedding Direction}\label{subsec:rw-pixelsmile}
 
@@ -62,7 +95,19 @@
 %      three discrete levels to {0.5, 0.75, 1.0}, discarding the continuous
 %      per-frame signal this work extracts.
 
-\todo[inline]{PixelSmile: the CLS protocol, the zero-shot baseline objection, why their MEAD result does not transfer.}
+PixelSmile \citep{hua2026pixelsmile} is the closest system in \emph{claim}: continuous, linear
+intensity control evaluated as a correlation between the commanded intensity and a detected one
+-- the protocol this work adopts for calibration (Section~\ref{sec:method-evaluation}). It scales
+a text-embedding direction by a scalar $\alpha$ on an image-editing backbone with LoRA, and
+reports a correlation of $0.81$. Two points follow. First, its zero-shot row -- text-embedding
+interpolation with \emph{no} training -- already reaches $0.69$ on the same score. This is the
+``why not simply prompt it?'' objection in concrete form; it is answered not by ignoring it but
+by the prompt-engineering baseline planned in Chapter~\ref{cap:schedule}. Second, its negative
+result on \gls{mead} does not transfer to this work: PixelSmile mapped \gls{mead}'s three
+discrete intensity levels onto $\{0.5,0.75,1.0\}$, discarding the continuous per-frame signal
+that Chapter~\ref{cap:method} extracts, so the comparison is not like-for-like. As with
+MagicFace, PixelSmile edits a source image, its levels are independent stills, and its $\alpha$
+is unitless.
 
 % =====================================================================
 \section{Action-Unit Conditioned Generation}\label{sec:rw-fineface}
@@ -83,7 +128,22 @@
 %     conceding the scale is nonlinear; there is no commanded-vs-detected
 %     correlation anywhere.
 
-\todo[inline]{FineFace: present as prior art, precisely delimit what it leaves open.}
+FineFace \citep{varanka2024fineface} is the prior art for this work's task, and is stated as
+such plainly. It generates a face from text alone, with no source image, conditioned on a
+continuous twelve-dimensional action-unit vector, using an adapter and a rank-32 LoRA on a
+frozen backbone with classifier-free guidance on the action-unit condition, and it demonstrates
+out-of-range extrapolation of the intensity scale. Its control is \emph{broader} than the single
+AU12 axis of Chapter~\ref{cap:introduction}: twelve action units and their combinations. No
+claim of primacy for action-unit-conditioned generation is therefore available to this work, and
+none is made anywhere in this document.
+
+What FineFace does not do is precisely the opening this work occupies. Its intensity sweep is a
+set of $N$ \emph{independent} stills that share only a random seed; nothing binds identity across
+the levels architecturally. It reports no face-identity metric at all. And its intensity control
+is shown only qualitatively, the authors themselves conceding that the scale is nonlinear; no
+commanded-versus-detected correlation is reported anywhere. This work keeps FineFace's text-only,
+adapter-on-frozen-backbone setting but replaces the independent stills with a single
+identity-consistent clip and adds the measurement the prior art omits.
 
 % =====================================================================
 \section{Positioning}\label{sec:rw-positioning}
@@ -115,4 +175,10 @@
     {\footnotesize Source: prepared by the author.}
 \end{table}
 
-\todo[inline]{Closing paragraph: state the gap this work fills, in one sentence, and forward-reference Cap04.}
+Table~\ref{tab:positioning} summarises the comparison. The gap is narrow but real: no prior
+system produces a numeric, per-frame expression-intensity trajectory as a single
+identity-consistent clip, and none reports commanded-versus-detected calibration against an
+independent detector. The contribution is therefore the sequence-native formulation and the
+measurement protocol, not superior expression control -- ramp following ties the prior art and
+FineFace holds absolute calibration (Section~\ref{sec:res-headtohead}). That gap, and the method
+that fills it, is the subject of Chapter~\ref{cap:method}.
