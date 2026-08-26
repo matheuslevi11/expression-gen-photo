@@ -9,7 +9,29 @@
 % \resumo em main.tex.
 % =====================================================================
 
-\todo[inline]{Traduzir do Abstract depois que ele estiver estavel.}
+\noindent Modelos de difusão geram faces fotorrealistas a partir de texto, mas o controle sobre a
+\emph{intensidade} de uma expressão ainda é grosseiro: comandos textuais são categóricos,
+distinguindo ``sorrindo'' de ``não sorrindo'' em vez de comandar uma intensidade graduada. Os
+sistemas mais próximos deste problema condicionam a geração a intensidades contínuas de unidades
+de ação, mas produzem cada nível de intensidade como uma imagem independente, não impõem nem medem
+a identidade entre os níveis, e relatam o controle de intensidade apenas qualitativamente. Este
+trabalho reformula a intensidade da expressão facial como um parâmetro de geração em nível de
+sequência: dado um texto e uma trajetória de intensidade por quadro, um \emph{backbone} Stable
+Diffusion~1.5 congelado, estendido com um módulo de movimento AnimateDiff, gera um único clipe
+temporalmente coerente cuja intensidade de expressão por quadro segue o comando. Apenas um pequeno
+codificador de expressão e os pesos de atenção que integram sua saída à atenção temporal do
+\emph{backbone} são treinados; o \emph{backbone} permanece congelado. Resultados preliminares em um
+único eixo de sorriso, a unidade de ação AU12 (levantadora do canto do lábio), mostram que a
+intensidade detectada segue a trajetória comandada (correlação de Pearson $r = 0{,}77$, confirmada
+por um detector independente que não produziu nenhum dos rótulos de treinamento) e que a identidade
+é preservada ao longo do clipe melhor do que pela geração independente (similaridade facial mínima
+entre quadros adjacentes de $0{,}88$ contra $0{,}79$). A comparação direta com o trabalho anterior
+mais próximo empata no seguimento da trajetória. Relatado de forma honesta, o controle é relativo à
+trajetória comandada, e não absoluto, consequência de dados de treinamento do tipo início-ao-ápice
+que o trabalho anterior oculta por não medir. A contribuição é, portanto, a formulação nativa em
+sequência da intensidade da expressão, juntamente com um protocolo de avaliação que separa
+seguimento de trajetória, calibração absoluta e identidade entre quadros, e que trata a
+circularidade rótulo--avaliação que os trabalhos mais próximos deixam sem sinalizar.
 
 \vspace{1em}
 \noindent\textbf{\textit{Palavras-chave}:~} síntese de expressões faciais. modelos de difusão. unidades de ação. geração controlável. consistência temporal.

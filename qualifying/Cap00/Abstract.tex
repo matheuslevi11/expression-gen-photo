@@ -16,7 +16,27 @@
 % not something to omit. See docs/status.md for the current numbers.
 % =====================================================================
 
-\todo[inline]{Write the abstract last, once Cap04 and Cap05 are stable.}
+\noindent Diffusion models generate photorealistic faces from text, but controlling how much of an
+expression is present remains coarse: text prompts are categorical, distinguishing ``smiling''
+from ``not smiling'' rather than commanding a graded intensity. The systems closest to this
+problem condition generation on continuous action-unit intensities, but they produce each
+intensity level as an independent still, neither enforce nor measure identity across levels, and
+report intensity control only qualitatively. This work reframes facial-expression intensity as a
+sequence-level generation parameter: given a text prompt and a per-frame intensity trajectory, a
+frozen Stable Diffusion~1.5 backbone extended with an AnimateDiff motion module generates a single
+temporally coherent clip whose per-frame expression intensity follows the command. Only a small
+expression encoder and the attention weights that merge its output into the backbone's temporal
+attention are trained; the backbone is frozen. Preliminary results on a single smile axis, the
+lip-corner-puller action unit (AU12), show that the detected intensity follows the commanded
+trajectory (Pearson correlation $r = 0.77$, confirmed by an independent detector that produced
+none of the training labels), and that identity is preserved across the clip better than by
+independent generation (worst-case adjacent-frame face similarity $0.88$ against $0.79$). A
+head-to-head against the closest prior art ties on trajectory following. Reported honestly, the
+control is relative to the commanded trajectory rather than absolute, a consequence of
+onset-to-apex training data that the prior art conceals by not measuring it. The contribution is
+therefore the sequence-native formulation of expression intensity, together with an evaluation
+protocol that separates trajectory following, absolute calibration, and cross-frame identity, and
+that guards the label--evaluation circularity the closest works leave unflagged.
 
 \vspace{1em}
 \noindent\textbf{\textit{Keywords}:~} facial expression synthesis. diffusion models. action units. controllable generation. temporal consistency.
