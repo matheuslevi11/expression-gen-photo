@@ -27,16 +27,14 @@ frozen Stable Diffusion~1.5 backbone extended with an AnimateDiff motion module 
 temporally coherent clip whose per-frame expression intensity follows the command. Only a small
 expression encoder and the attention weights that merge its output into the backbone's temporal
 attention are trained; the backbone is frozen. Preliminary results on a single smile axis, the
-lip-corner-puller action unit (AU12), show that the detected intensity follows the commanded
-trajectory (Pearson correlation $r = 0.77$, confirmed by an independent detector that produced
-none of the training labels), and that identity is preserved across the clip better than by
-independent generation (worst-case adjacent-frame face similarity $0.88$ against $0.79$). A
-head-to-head against the closest prior art ties on trajectory following. Reported honestly, the
-control is relative to the commanded trajectory rather than absolute, a consequence of
-onset-to-apex training data that the prior art conceals by not measuring it. The contribution is
-therefore the sequence-native formulation of expression intensity, together with an evaluation
-protocol that separates trajectory following, absolute calibration, and cross-frame identity, and
-that guards the label--evaluation circularity the closest works leave unflagged.
+lip-corner-puller action unit AU12, show that the detected intensity follows the commanded
+trajectory at a Pearson correlation of $r = 0.77$ over 120 clips, corroborated by an
+independent detector that produced none of the training labels. Identity is better preserved
+across a clip than across independently generated stills, at a worst-case adjacent-frame
+similarity of $0.88$ against $0.76$. A head-to-head against the closest prior art ties on
+trajectory following and is won by that system on absolute calibration: the control obtained
+here is relative to the commanded trajectory rather than absolute, a measured consequence of
+onset-to-apex training data. The contribution is therefore the sequence-native formulation of expression intensity, together with an evaluation protocol that separates trajectory following, absolute calibration, and cross-frame identity, and that guards the label--evaluation circularity.
 
 \vspace{1em}
 \noindent\textbf{\textit{Keywords}:~} facial expression synthesis. diffusion models. action units. controllable generation. temporal consistency.

@@ -21,17 +21,15 @@ Diffusion~1.5 congelado, estendido com um módulo de movimento AnimateDiff, gera
 temporalmente coerente cuja intensidade de expressão por quadro segue o comando. Apenas um pequeno
 codificador de expressão e os pesos de atenção que integram sua saída à atenção temporal do
 \emph{backbone} são treinados; o \emph{backbone} permanece congelado. Resultados preliminares em um
-único eixo de sorriso, a unidade de ação AU12 (levantadora do canto do lábio), mostram que a
-intensidade detectada segue a trajetória comandada (correlação de Pearson $r = 0{,}77$, confirmada
-por um detector independente que não produziu nenhum dos rótulos de treinamento) e que a identidade
-é preservada ao longo do clipe melhor do que pela geração independente (similaridade facial mínima
-entre quadros adjacentes de $0{,}88$ contra $0{,}79$). A comparação direta com o trabalho anterior
-mais próximo empata no seguimento da trajetória. Relatado de forma honesta, o controle é relativo à
-trajetória comandada, e não absoluto, consequência de dados de treinamento do tipo início-ao-ápice
-que o trabalho anterior oculta por não medir. A contribuição é, portanto, a formulação nativa em
-sequência da intensidade da expressão, juntamente com um protocolo de avaliação que separa
-seguimento de trajetória, calibração absoluta e identidade entre quadros, e que trata a
-circularidade rótulo--avaliação que os trabalhos mais próximos deixam sem sinalizar.
+único eixo de sorriso, a unidade de ação AU12, levantadora do canto do lábio, mostram que a
+intensidade detectada segue a trajetória comandada a uma correlação de Pearson de
+$r = 0{,}77$ sobre 120 clipes, corroborada por um detector independente que não produziu
+nenhum dos rótulos de treinamento. A identidade é mais bem preservada dentro de um clipe do
+que entre imagens geradas independentemente, a uma similaridade mínima entre quadros
+adjacentes de $0{,}88$ contra $0{,}76$. A comparação direta com o trabalho anterior mais
+próximo empata no seguimento da trajetória e é vencida por aquele sistema na calibração
+absoluta: o controle aqui obtido é relativo à trajetória comandada, e não absoluto,
+consequência medida de dados de treinamento do tipo início-ao-ápice. A contribuição é, portanto, a formulação nativa em sequência da intensidade da expressão, juntamente com um protocolo de avaliação que separa seguimento de trajetória, calibração absoluta e identidade entre quadros, e que trata da circularidade rótulo--avaliação.
 
 \vspace{1em}
 \noindent\textbf{\textit{Palavras-chave}:~} síntese de expressões faciais. modelos de difusão. unidades de ação. geração controlável. consistência temporal.
