@@ -25,12 +25,24 @@
 % via \gls{}. Keep the detailed method out of here (it belongs in Cap04).
 % =====================================================================
 
-\todo[inline]{Write the motivation: why graded expression intensity control is needed, and for whom.}
-
 % =====================================================================
 \section{Motivation}\label{sec:motivation}
 
-\todo[inline]{2--3 dense paragraphs. Applications first, then why current text conditioning is insufficient.}
+Controllable synthesis of facial expressions has broad use. Photorealistic faces with a
+specified, graded expression provide stimuli for affective-computing and behavioural studies,
+where the intensity of an expression must be varied in a controlled way; they animate avatars
+and virtual characters with believable affect; and they supply training and augmentation data
+for \gls{fer}, where labelled examples spanning the full intensity range are scarce. In each of
+these settings what matters is not merely whether a face is smiling, but \emph{how much}.
+
+Diffusion models have made photorealistic face generation routine, and text prompts give
+convenient high-level control. That control, however, is categorical: a prompt distinguishes
+``smiling'' from ``not smiling'', but has no natural way to command a smile at, say, half
+intensity, or to sweep intensity smoothly from neutral to broad. Expressing a continuous quantity
+through discrete language is the wrong instrument. What is needed is a numeric axis of expression
+intensity on which a diffusion backbone can be conditioned directly, and, for the sequences that
+behavioural stimuli and augmentation data require, an axis that varies across the frames of a
+single coherent clip rather than across unrelated images.
 
 % =====================================================================
 \section{Problem Statement}\label{sec:problem}
@@ -49,7 +61,23 @@
 % generated sequence, and none measures commanded-vs-detected intensity with
 % an objective facial-action detector.
 
-\todo[inline]{State the gap. Be precise about what is and is not already in the prior art.}
+The gap is specific. The systems closest to this problem, examined in
+Chapter~\ref{cap:related-work}, each solve a different one. FineFace \citep{varanka2024fineface}
+conditions text-to-image generation on continuous action-unit intensities, but produces each
+intensity level as an \emph{independent} still, binds identity across levels by nothing more than
+a shared random seed, reports no identity metric, and shows intensity control only qualitatively.
+MagicFace \citep{wei2025magicface} offers continuous action-unit control but \emph{edits} a source
+image, with relative rather than absolute targets and a full backbone fine-tune. PixelSmile
+\citep{hua2026pixelsmile} measures intensity linearity but is again an editing method with a
+unitless scale, and the same model both builds its data and judges its results. EmojiDiff
+\citep{jiang2024emojidiff} transfers an expression from an RGB exemplar and cannot take a numeric
+intensity as input at all.
+
+Two absences follow. No existing system produces identity-consistent intensity \emph{trajectories}
+within a single generated sequence, and none measures commanded-versus-detected intensity against
+an objective facial-action detector that did not also produce its training labels. That pair of
+absences, a sequence-native intensity axis and an honest measurement of it, is the opening this
+work addresses.
 
 % =====================================================================
 \section{Research Questions}\label{sec:research-questions}
@@ -86,16 +114,20 @@ property of the training data determines which?
 
 \subsection{General Objective}\label{subsec:general-objective}
 
-\todo[inline]{One paragraph. Should read as a single sentence of intent, matching the title.}
+The general objective of this work is to adapt the camera-parameter conditioning mechanism of a
+frozen text-to-video diffusion backbone into a facial-expression intensity axis, so that a text
+prompt and a per-frame intensity trajectory generate a single identity-consistent clip whose
+detected expression intensity follows the command, and to evaluate that control with a protocol
+that separately measures trajectory following, absolute calibration, and cross-frame identity.
 
 \subsection{Specific Objectives}\label{subsec:specific-objectives}
 
 \begin{itemize}
-    \item \todo[inline]{Adapt the camera-parameter conditioning mechanism of \citet{yuan2024genphoto} to a facial-expression intensity axis.}
-    \item \todo[inline]{Build continuous per-frame AU12 supervision from video (\gls{mead}).}
-    \item \todo[inline]{Define an evaluation protocol measuring ramp-following, absolute calibration and cross-frame identity.}
-    \item \todo[inline]{Compare head-to-head against the closest prior art under matched prompts.}
-    \item \todo[inline]{Characterise the failure modes (calibration, demographic bias, non-monotonic trajectories).}
+    \item Adapt the camera-parameter conditioning mechanism of \citet{yuan2024genphoto} to a facial-expression intensity axis.
+    \item Build continuous per-frame AU12 supervision from video (\gls{mead}).
+    \item Define an evaluation protocol measuring ramp following, absolute calibration, and cross-frame identity.
+    \item Compare head-to-head against the closest prior art under matched prompts.
+    \item Characterise the failure modes: calibration, demographic bias, and non-monotonic trajectories.
 \end{itemize}
 
 % =====================================================================
@@ -142,7 +174,7 @@ property of the training data determines which?
 \begin{itemize}
     \item \textbf{C1 (Formulation).} Expression intensity is cast as a \emph{sequence-level}
     generation parameter: one text prompt and one per-frame trajectory yield a single
-    identity-consistent clip, whereas the closest prior art \citep{varanka2024fineface}
+    identity-consistent clip, whereas the closest prior art \citep{varanka2024fineface} (FineFace)
     produces $N$ independent stills bound only by a shared random seed. Delivered by the
     method overview and conditioning design (Sections~\ref{sec:method-overview}
     and~\ref{sec:method-conditioning}) and evaluated in the head-to-head comparison
@@ -154,12 +186,24 @@ property of the training data determines which?
     Section~\ref{sec:method-evaluation} and applied across
     Sections~\ref{sec:res-ramp}--\ref{sec:res-headtohead}.
     \item \textbf{C3 (Empirical characterization).} A quantified commanded-versus-detected
-    dose--response, which the closest prior art reports only qualitatively, including the
-    negative finding that ramp-only video supervision yields relative rather than absolute
-    control. Delivered by Section~\ref{sec:res-calibration}.
+    calibration curve, reported as a single comparable scalar for both this work and FineFace,
+    which reports intensity control only qualitatively. The measurements show that ramp-only video
+    supervision produces control that is relative to the commanded trajectory rather than absolute. 
+    Delivered by Section~\ref{sec:res-calibration}.
 \end{itemize}
+
+\noindent Together these establish the contribution as the sequence-native formulation and the
+evaluation protocol, not superior expression control: as Chapter~\ref{cap:preliminary-results}
+reports, ramp following ties the prior art and FineFace holds absolute calibration.
 
 % =====================================================================
 \section{Document Organization}\label{sec:organization}
 
-\todo[inline]{One short paragraph mapping Chapters~\ref{cap:background} to \ref{cap:schedule}. Write last.}
+The remainder of this document is organised as follows. Chapter~\ref{cap:background} introduces
+the diffusion, conditioning, temporal-generation, and facial-action-coding machinery on which the
+method rests. Chapter~\ref{cap:related-work} positions the work against the closest expression
+transfer, editing, and generation systems. Chapter~\ref{cap:method} details the proposed method:
+the frozen backbone, the expression conditioning, the training data and setup, and the evaluation
+protocol. Chapter~\ref{cap:preliminary-results} reports what has been measured so far, including
+the negative calibration result. Chapter~\ref{cap:schedule} lists the completed and remaining
+work with the schedule to completion.

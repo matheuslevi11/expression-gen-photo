@@ -35,41 +35,44 @@ trajectory into a six-channel spatial conditioning tensor, which is merged into 
 temporal attention through a set of zero-initialised weights.
 Figure~\ref{fig:system} shows a pipeline overview.
 
-% TODO: Trabalhar em consertar essa figura
-
 \begin{figure}[t]
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-  font=\small, node distance=6mm and 7mm,
-  box/.style={rounded corners=2pt, draw, minimum height=9mm, align=center, inner sep=4pt},
+  font=\small,
+  box/.style={rounded corners=2pt, draw, minimum height=8mm, align=center, inner sep=4pt},
   frozen/.style={box, fill=blue!8, draw=blue!45},
   train/.style={box, fill=orange!22, draw=orange!85!black, very thick},
   io/.style={box, fill=gray!10, draw=gray!55},
   arr/.style={-{Latex[length=2mm]}, thick, gray!55!black},
   ]
+  % conditioning path (bottom row)
   \node[io] (traj) {Intensity trajectory\\$(s_1,\dots,s_F)$};
-  \node[io, above=5mm of traj] (prompt) {Text prompt $p$};
-  \node[train, right=of traj] (enc) {Expression\\encoder};
-  \node[box, draw=gray!45, fill=gray!5, right=of enc] (cond) {6-channel\\cond.\ tensor};
-  \node[frozen, right=of cond, minimum height=22mm, text width=22mm] (unet)
-       {Frozen SD1.5\\UNet3D\\+ AnimateDiff};
-  \node[train, above=6mm of unet] (merge) {Zero-init merge\\(temporal attn.)};
-  \node[frozen, right=of unet] (vae) {VAE\\decoder};
-  \node[io, right=of vae] (out) {Output clip\\($F$ frames)};
-  \node[frozen] at (enc |- prompt) (clip) {CLIP text\\encoder};
+  \node[train, right=7mm of traj] (enc) {Expression\\encoder};
+  \node[box, draw=gray!45, fill=gray!5, right=6mm of enc] (cond) {6-channel\\tensor};
+  \node[train, right=6mm of cond] (tatt) {Temporal\\attention};
+  % text path (top row, aligned above the conditioning path)
+  \node[io, above=7mm of traj] (prompt) {Text prompt $p$};
+  \node[frozen, above=7mm of enc] (clip) {CLIP text\\encoder};
+  % backbone spans both rows; both paths enter its left edge without crossing
+  \node[frozen, minimum height=20mm, minimum width=15mm, right=9mm of tatt, yshift=8mm] (backbone) {Backbone};
+  \node[frozen, right=8mm of backbone] (vae) {VAE\\decoder};
+  \node[io, right=6mm of vae] (out) {Output clip};
   \draw[arr] (traj) -- (enc);
   \draw[arr] (enc) -- (cond);
+  \draw[arr] (cond) -- (tatt);
   \draw[arr] (prompt) -- (clip);
-  \draw[arr] (cond) -| (merge);
-  \draw[arr] (merge) -- (unet);
-  \draw[arr] (clip) -| (unet);
-  \draw[arr] (unet) -- (vae);
+  \draw[arr] (tatt.east) -- (backbone.west |- tatt.east);
+  \draw[arr] (clip.east) -- (backbone.west |- clip.east);
+  \draw[arr] (backbone) -- (vae);
   \draw[arr] (vae) -- (out);
 \end{tikzpicture}%
 }
-\caption[System overview.]{System overview. The intensity trajectory is encoded into a
-six-channel conditioning tensor and merged into the temporal attention of a frozen backbone. Only the expression encoder and the merge weights are trained (orange); the backbone, VAE, CLIP text encoder and motion module are frozen (blue).}
+\caption[System overview.]{System overview. The intensity trajectory is encoded and
+injected into the backbone's temporal attention, while the text prompt conditions the
+backbone through CLIP; the backbone output is decoded by the VAE. Trained components are
+orange (the expression encoder and the temporal-attention merge); the backbone, VAE and
+CLIP text encoder are frozen (blue).}
 \label{fig:system}
 \end{figure}
 
@@ -77,27 +80,28 @@ six-channel conditioning tensor and merged into the temporal attention of a froz
 \section{Backbone and Trainable Components}\label{sec:method-backbone}
 
 The backbone is inherited whole and kept frozen: the SD1.5 UNet, the \gls{vae}, the CLIP text encoder
-\citep{radford2021clip}, the AnimateDiff motion module \citep{guo2024animatediff}, and a
-rank-2 RealEstate10K \gls{lora} \citep{hu2022lora} that is part of the released backbone.
+\citep{radford2021clip}, the AnimateDiff motion module \citep{guo2024animatediff}, and a RealEstate10K 
+\gls{lora} \citep{hu2022lora} that is part of the released backbone.
 Only two components are trained: the \emph{expression encoder} and the attention
 merge weights that inject its output into the UNet. The implementation sets the
 spatial attention processors trainable and then re-freezes every parameter related to LoRA, so those layers are a frozen backbone component and are not adapted. Table~\ref{tab:method-components} lists the components and the parameter
 counts.
 
-% TODO: Adaptar essa tabela para mostrar o número de parâmetros em todas as linhas
 \begin{table}[t]
 \centering
-\caption{Number of parameters in frozen and trainable components.}
+\caption{Number of parameters in frozen and trainable components. The trained adaptor represents about 12\% of the roughly 1.8\,B-parameter system.}
 \label{tab:method-components}
 \begin{tabular}{llr}
 \toprule
 Component & Role & Number of params \\
 \midrule
-SD1.5 UNet3D (\texttt{unet\_merged}) & frozen backbone & --- \\
-\gls{vae} & frozen & --- \\
-CLIP text encoder & frozen & --- \\
-AnimateDiff motion module & frozen & --- \\
-RealEstate10K \gls{lora} (rank 2) & frozen & --- \\
+SD1.5 UNet3D (\texttt{unet\_merged}) & frozen backbone & 859.52\,M \\
+\gls{vae} & frozen & \phantom{0}83.65\,M \\
+CLIP text encoder & frozen & 123.06\,M \\
+AnimateDiff motion module & frozen & 417.14\,M \\
+RealEstate10K \gls{lora} & frozen & \phantom{0}96.32\,M \\
+\midrule
+Total frozen & & 1{,}579.69\,M \\
 \midrule
 Expression encoder & \textbf{trained} & 199.26\,M \\
 Attention \texttt{merge} weights & \textbf{trained} & \phantom{0}18.96\,M \\
@@ -113,7 +117,7 @@ Attention \texttt{merge} weights & \textbf{trained} & \phantom{0}18.96\,M \\
 \subsection{Intensity Embedding}\label{subsec:method-embedding}
 
 Generative Photography conditions the backbone on a six-channel spatial tensor of shape
-$[F, 6, H, W]$ whose first three channels carry a \emph{physical} signal and whose last three carry a text-derived change signal (Section~\ref{subsec:method-ccl}).
+$[F, 6, H, W]$ whose first three channels carry a \emph{physical} signal and whose last three carry a text-derived change signal.
 
 For expression intensity there is no physical rendering to place in the first three
 channels. The scalar intensity $s_t$ of each frame is instead broadcast spatially to a
@@ -121,44 +125,48 @@ constant $[F, 3, H, W]$ map. This scalar-broadcast design fits the inherited lay
 architectural change; spatially structured alternatives such as a landmark-displacement
 map or a multi-dimensional \gls{au} vector are discussed as future work in
 Chapter~\ref{cap:schedule}. Frames are rendered at $H\times W = 256\times384$.
-% TODO: I don't think this subsection title
-\subsection{Change Encoding in the Text Branch}\label{subsec:method-ccl}
+\subsection{Inter-Frame Change Encoding}\label{subsec:method-ccl}
 
-% TODO: Change the CCL term to expression instead of camera
-The last three channels carry the \gls{ccl} signal, which encodes the direction and
-magnitude of change \emph{between} consecutive frames. For each frame a prompt of the form
+The last three channels carry an \emph{inter-frame change} signal that encodes the
+direction and magnitude of change \emph{between} consecutive frames, adapting the
+change-encoding construction of Generative Photography's \gls{ccl} \citep{yuan2024genphoto}
+to expression-intensity prompts. For each frame a prompt of the form
 \texttt{<smile intensity: 0.25>} is formed and encoded with the frozen CLIP text encoder;
-the per-frame CLIP hidden states are then differenced, frame $i$ minus frame $i-1$. The resulting difference tensor is padded to match the shape of the generated image, then broadcast across the three channels. The between-frames semantics are what make this signal specific to the sequence formulation: a difference of consecutive-frame text embeddings is meaningful only when the frames form one ordered trajectory, and has no counterpart in the single-image setting of the prior art.
-% This whole section is shit, let's see if we rewrite or get rid of it
-\subsection{Injection into Temporal Attention}\label{subsec:method-merge}
+the per-frame CLIP hidden states are then differenced, frame $i$ minus frame $i-1$. The resulting difference tensor is padded to match the shape of the generated image, then broadcast across the three channels. The between-frames semantics are what make this signal specific to the sequence formulation: a difference of consecutive-frame text embeddings is meaningful only when the frames form one ordered trajectory, and has no counterpart in other methods.
 
-The encoder output is merged into the backbone through a set of \emph{merge} weights added
-to the temporal-attention path. This has a consequence worth stating explicitly: with no adaptor checkpoint loaded, the merge contributes exactly zero and the model is bit-identical to the unmodified backbone. That equivalence was verified on 2026-07-09, where running the frozen backbone through the
-conditioning code path with zero-initialised merge weights produced output bit-identical
-to bypassing the conditioning entirely. It is what makes the ablation baseline of
-Section~\ref{sec:method-baselines} \emph{provably} fair: the baseline is not a separate
-model but the same model with its trained contribution set to zero.
+\subsection{Temporal Attention}\label{subsec:method-merge}
+
+The conditioning tensor is injected into the temporal-attention layers of the motion
+module. Let $h$ denote the hidden states entering one such layer and $f$ the corresponding expression feature produced by the
+encoder. A trainable linear map $W$, one per layer, is applied to their sum and added back
+as a residual,
+%
+\begin{equation}\label{eq:merge}
+    h' = h + \lambda\, W(h + f),
+\end{equation}
+%
+with $\lambda = 1$ throughout. The merged state $h'$ supplies the query, key and value
+projections of the layer, so the intensity signal conditions both what a frame attends to
+and what it exposes to the other frames. This makes the per-frame intensity be read in the context of the whole trajectory.
+
+Every $W$ is zero-initialised, so before any update Equation~\ref{eq:merge} reduces to the
+identity map $h' = h$ and the conditioning path is inert. Optimisation thus starts from the
+behaviour of the unmodified backbone, and the trained adaptor is a learned deviation from
+a fixed reference point.
 
 % =====================================================================
 \section{Training Data}\label{sec:method-data}
-% TODO: Review the underline text
+
 Training data is derived from the front-view \emph{happy} clips of \gls{mead}
 \citep{wang2020mead}. Faces are cropped with MediaPipe \citep{lugaresi2019mediapipe}, and
 each frame is labelled with a continuous AU intensity from py-feat
 \citep{cheong2023pyfeat}. Raw \gls{mead} provides three discrete intensity levels per
-clip; \underline{the dataset composes onset-to-apex monotonic \emph{ramps} of $F$ frames from sorted frames}, so that a clip's frames increase in expression intensity. The split contains
-4{,}028 training and 176 validation clips. The validation identities do not appear in training, to ensure there isn't an identity leakage into the validation signal.
-% TODO: Review this section. I don't think the calibration results should be mentioned here
-The training clips are ramps only, that is, onset-to-apex trajectories; the model therefore sees expression intensity only as a quantity that increases through a clip, and this is the root cause of the relative-not-absolute calibration result in Section~\ref{sec:res-calibration}. Second,
-\gls{mead} happy clips carry substantial AU12 even at their lowest labelled level, which
-biases the low end of the intensity range upward. Crucially, none of this data enters the
-evaluation loop: all reported results are generated from a text-prompt bank and scored by
-external detectors (Section~\ref{sec:method-evaluation}), so the training and validation
-clips influence only the learned weights, never a reported metric.
+clip; the dataset composes monotonically increasing \emph{ramps} of $F$ frames by sorting frames by labelled intensity, spanning the onset-to-apex portion of each clip. The split contains
+4{,}028 training and 176 validation clips. The validation identities do not appear in training to ensure there isn't an identity leakage into the validation signal. \gls{mead} happy clips carry substantial AU12 even at their lowest labelled level, which biases the low end of the intensity range upward.
 
 % =====================================================================
 \section{Training Setup}\label{sec:method-training}
-% TODO: Extract the parameters to a table instead of parenthesis in the middle of the text
+
 The training objective is the standard denoising-diffusion loss \citep{ho2020ddpm}: with
 the backbone frozen, the expression encoder and merge weights are optimised to predict the
 noise added to the encoded video latents, conditioned on the prompt and the six-channel
@@ -167,69 +175,64 @@ $\epsilon=10^{-8}$) at a constant learning rate of $10^{-4}$ with no warmup and 
 clipping at norm $1.0$. The effective batch size is $4$, realised as a micro-batch of $1$
 with $4$ gradient-accumulation steps, under fp16 mixed precision; peak memory is about
 $19$\,GB on the RTX~3090. Training runs for 100k steps, checkpointing every 1{,}000 steps
-and sampling validation clips every 5{,}000 steps (capped at 8 clips), with a fixed seed
+and sampling validation clips every 5{,}000 steps, with a fixed seed
 of $42$.
 
 % =====================================================================
 \section{Evaluation Protocol}\label{sec:method-evaluation}
-% TODO: This section needs to be rewritten, it's not on scientific language
-The evaluation is itself a contribution, because none of the four closest works
-\citep{varanka2024fineface, wei2025magicface, hua2026pixelsmile, jiang2024emojidiff}
-measures all three of the axes below, and all four score expression with the same detector
-family that produced their training labels without flagging the resulting circularity. The
-protocol separates three questions and answers each with its own instrument. Unless stated
-otherwise, samples are generated from a bank of 40 text prompts (\texttt{eval\_prompts.txt})
-with three seeds ($42,43,44$), at 25 denoising steps and classifier-free guidance
-\citep{ho2022cfg} scale $8.0$.
+
+Three properties of a generated clip are measured separately, each with its own instrument:
+whether the detected intensity follows the commanded trajectory
+, whether a commanded value maps to a fixed detected
+intensity, and whether identity is preserved across
+the clip . Section~\ref{subsec:eval-circularity} states
+the control applied to the shared dependence of labels and metrics on a single estimator.
+Unless stated otherwise, samples are generated from a bank of 40 text prompts with three seeds, 
+at 25 denoising steps and \gls{cfg} \citep{ho2022cfg} scale $8.0$.
 
 \subsection{Trajectory Following}\label{subsec:eval-ramp}
-% TODO: This section needs to be refined
-The first question is whether the detected intensity follows the commanded trajectory. An
-ascending ramp $(0, 0.25, 0.5, 0.75, 1.0)$ is commanded, the generated frames are scored
-with py-feat, and the Pearson correlation $r$ between the commanded per-frame intensity and
-the detected AU12 intensity is reported, aggregated over the prompt bank and seeds
-($n=120$). A high $r$ says the model orders and spaces the frames as commanded; because
-Pearson $r$ is invariant to scale and offset, it measures following, not calibration, which motivates the next axis.
+
+Trajectory following is measured under an ascending ramp with five steps from 0 to 1. The
+generated frames are scored with py-feat and the Pearson correlation $r$ between the
+commanded per-frame intensity and the detected AU12 intensity is reported, aggregated over
+the prompt bank. Pearson $r$ is invariant to scale and offset, so it quantifies the ordering 
+and relative spacing of the frames rather than the absolute intensity they attain.
 
 \subsection{Absolute Calibration}\label{subsec:eval-calibration}
 
-The second question separates ``follows a ramp'' from ``is calibrated''. The commanded
-value is held \emph{constant} across a clip and varied between clips over
-$\{0.0, 0.1, \dots, 1.0\}$: a calibrated model changes its detected intensity with the
-commanded constant, whereas a model that only responds to change does not. Following
+Calibration is measured with clips in which the commanded value is held \emph{constant}
+across the $F$ frames and varied between clips over $\{0.0, 0.1, \dots, 1.0\}$. Under this
+design a calibrated model varies its detected intensity with the commanded constant,
+whereas a model that responds only to change within a clip does not. Following
 \citet{hua2026pixelsmile} for comparability, the \gls{cls} is reported as the Pearson
-correlation between the commanded constant and the pooled detected intensities, and it is
-complemented by an absolute error (\gls{mse} of detected AU12 against the commanded value),
-since Pearson $r$ alone cannot detect a constant offset. A permuted-list design, in which
-non-monotonic trajectories are commanded, probes whether per-frame conditioning is
-genuinely per-frame rather than a single ramp-shaped prior.
+correlation between the commanded constant and the pooled detected intensities. Pearson $r$
+is insensitive to a constant offset, so it is complemented by the \gls{mse} of the detected
+AU12 against the commanded value.
 
 \subsection{Identity Consistency}\label{subsec:eval-identity}
 
-The third question is whether identity is preserved across the intensity levels. Within a
-generated clip, face embeddings are extracted per frame with an InceptionResnetV1 network
-trained on VGGFace2 \citep{schroff2015facenet, cao2018vggface2}, and the cosine similarity
-between frames is reported. The \emph{adjacent-frame minimum} is reported rather than only
-the mean, because the worst transition is the one a viewer notices. The same measurement is
-applied to the independent stills of the baseline, so the comparison is like-for-like.
-This is a \emph{within-clip} coherence measure, for which high similarity is the goal; it
-must not be confused with the source-to-output identity similarity reported by editing and
-transfer methods, where an excessively high value instead signals that little editing
-occurred. Multi-model averaging, adding an ArcFace embedding \citep{deng2019arcface}, is
-planned and scheduled in Chapter~\ref{cap:schedule}.
+Identity consistency is measured within a generated clip. Face embeddings are extracted per
+frame with an InceptionResnetV1 network trained on VGGFace2
+\citep{schroff2015facenet, cao2018vggface2}, and the cosine similarity between frames is
+reported. Both the mean and the \emph{adjacent-frame minimum} are reported, the latter
+because a mean over frames can mask a single large discontinuity. The same measurement is
+applied to the independent stills produced by the baselines of
+Section~\ref{sec:method-baselines}, under the same prompts and seeds.
 
-\subsection{Guarding Against Label--Evaluation Circularity}\label{subsec:eval-circularity}
+The quantity is a \emph{within-clip} coherence measure, for which a high value is the
+objective. It is distinct from the source-to-output identity similarity reported by editing
+and transfer methods, where a high value can instead indicate that little editing occurred.
 
-py-feat produces both the training labels and the primary AU12 metric, a circularity that
-would let the model score well by reproducing its labeller's biases. The mitigation is a
-second estimator from a different family: a label-independent smile proxy computed from
-MediaPipe FaceMesh mouth-corner geometry \citep{lugaresi2019mediapipe}, which touched none
-of the training labels. Where the two estimators agree, a result is not an artefact of the
-py-feat pipeline. All four studied works share the label/evaluation circularity without
-flagging it, so measuring against an independent detector is an evaluation contribution
-rather than an admission of weakness; its limit is that the proxy measures smile geometry
-only, not the full AU12 construct, and is reported as a corroborating rather than primary
-signal.
+\subsection{Label--Evaluation Circularity}\label{subsec:eval-circularity}
+
+The AU estimator py-feat produces both the training labels and the primary AU12 metric. A model could
+therefore obtain a favourable score by reproducing the biases of its own labeller rather
+than by rendering the commanded expression. A second estimator from a different family is
+used as a control: a smile proxy computed from MediaPipe FaceMesh mouth-corner geometry
+\citep{lugaresi2019mediapipe}, which contributed no training label. Agreement between the
+two estimators indicates that a result is not specific to the py-feat pipeline. The proxy
+measures mouth-corner geometry rather than the full AU12 construct, and is therefore
+reported as a corroborating signal.
 
 % =====================================================================
 \section{Baselines}\label{sec:method-baselines}

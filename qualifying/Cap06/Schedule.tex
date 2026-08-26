@@ -30,6 +30,8 @@
     \item Identity-consistency measurement against a provably fair frozen-backbone baseline (Section~\ref{sec:res-identity}).
     \item Absolute-calibration measurement, with a negative outcome and a diagnosis (Section~\ref{sec:res-calibration}).
     \item Head-to-head comparison against the closest prior art under matched prompts (Section~\ref{sec:res-headtohead}).
+    \item Training-step dose--response, confirming that training produces the capability (Section~\ref{sec:res-dose}).
+    \item Whole-face co-activation analysis of the single axis, cross-checked against an independent estimator (Section~\ref{sec:res-coactivation}).
 \end{itemize}
 
 % =====================================================================
@@ -40,8 +42,8 @@
 % Schedule these first; they gate everything downstream.
 
 \begin{itemize}
-    \item \textbf{Calibration remedies.} Augment training with constant and permuted intensity trajectories so the model observes non-ramp targets; add \gls{au} dropout with \gls{cfg} on the expression condition \citep{wei2025magicface}; apply label distribution smoothing \citep{varanka2024fineface}. Target: turn the relative control of Section~\ref{sec:res-calibration} into absolute control. \todo[inline]{Decide with the advisor whether this is in scope for the dissertation or is stated as a limitation.}
-    \item \textbf{Multi-AU extension.} Generalise the single AU12 axis to an AU vector, matching the control breadth of the prior art. \todo[inline]{Scope decision needed: this may be one axis too many for the time available.}
+    \item \textbf{Calibration remedies.} Augment training with constant and permuted intensity trajectories so the model observes non-ramp targets; add \gls{au} dropout with \gls{cfg} on the expression condition \citep{wei2025magicface}; apply label distribution smoothing \citep{varanka2024fineface}. The goal is to turn the relative control of Section~\ref{sec:res-calibration} into absolute control; should it not, the relative-control finding stands as a reported and diagnosed result.
+    \item \textbf{Multi-AU extension.} Generalise the single AU12 axis to an action-unit vector, matching the control breadth of the prior art and decoupling the co-activated units that Section~\ref{sec:res-coactivation} shows a single axis cannot separate. This requires expanding the training data beyond the single happy emotion of \gls{mead}, and is treated as optional work whose inclusion is decided by a fixed date (Section~\ref{sec:sched-risks}).
 \end{itemize}
 
 \subsection{Inference and Evaluation Only}\label{subsec:sched-eval}
@@ -49,7 +51,7 @@
 % Cheap, independent, and each closes a specific checklist item.
 
 \begin{itemize}
-    \item \textbf{Training-step dose--response.} Evaluate trajectory following at intermediate checkpoints, giving independent evidence that training produces the capability. \todo[inline]{Run before any checkpoint housekeeping; the intermediate checkpoints are the raw material.}
+    \item \textbf{Checkpoint re-evaluation.} Re-run the headline evaluation at a 25k--50k checkpoint, which the dose--response of Section~\ref{sec:res-dose} identified as mildly stronger for ramp following than the released 100k checkpoint. Inference and scoring only.
     \item \textbf{Prompt-engineering baseline.} Graded textual smile descriptions on the unmodified backbone, answering the zero-shot objection of \citet{hua2026pixelsmile}.
     \item \textbf{Out-of-range intensity probe.} Commanded values below zero and above one, as a disentanglement check.
     \item \textbf{Multi-model identity averaging.} Add ArcFace \citep{deng2019arcface} to the existing embedding model to remove single-estimator dependence.
@@ -58,7 +60,13 @@
 
 \subsection{Writing}\label{subsec:sched-writing}
 
-\todo[inline]{Dissertation chapters, and any paper submission targeted along the way.}
+The dissertation extends this proposal along the axes above: a completed calibration study,
+whether positive or reported as a limitation; the inference-only evaluations of
+Section~\ref{subsec:sched-eval}; and, if in scope, the multi-AU extension. The writing reuses the
+chapters of this document -- method, results, and related work are largely in place -- folding the
+new experiments into Chapter~\ref{cap:preliminary-results} and expanding the background as needed.
+A short paper on the sequence-native formulation and the measurement protocol is a possible
+submission target once the calibration study concludes.
 
 % =====================================================================
 \section{Timetable}\label{sec:sched-timetable}
@@ -119,4 +127,17 @@
 % claim of superior expression control. Keep this consistent with Cap01;
 % the two chapters are read together.
 
-\todo[inline]{Two or three paragraphs. Write last, and check it agrees with Cap01 word for word on the contribution claim.}
+This work reframes facial-expression intensity as a sequence-level generation parameter: a single
+text prompt and a per-frame intensity trajectory yield one identity-consistent clip, where the
+closest prior art produces independent stills. The preliminary results establish that the
+trajectory is followed, that identity is preserved across it better than by independent
+generation, and -- reported plainly -- that the control is relative rather than absolute, a
+consequence of ramp-only training data.
+
+The contribution is therefore the sequence-native formulation together with the evaluation
+protocol that separates trajectory following, absolute calibration, and cross-frame identity, and
+that guards the label--evaluation circularity the closest works leave unflagged. It is not a claim
+of superior expression control: ramp following ties the prior art and FineFace holds absolute
+calibration (Section~\ref{sec:res-headtohead}). The remaining work aims to close the calibration
+gap and broaden the control axis, but the formulation and the protocol stand independently of
+whether that work succeeds.
