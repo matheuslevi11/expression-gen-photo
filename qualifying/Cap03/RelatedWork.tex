@@ -14,16 +14,20 @@
 % problems, and that none solves the one posed in Chapter~\ref{cap:introduction}.
 % =====================================================================
 
-The systems closest to this work solve three different problems, and none solves the one posed
-in Chapter~\ref{cap:introduction}. Expression \emph{transfer} copies the expression of a
-reference image onto a target identity (Section~\ref{sec:rw-transfer}); expression
-\emph{editing} modifies the expression of a given source image (Section~\ref{sec:rw-editing});
-and expression-conditioned \emph{generation} synthesises a face from text under an action-unit
-condition, with no source image (Section~\ref{sec:rw-fineface}). This chapter is organised by
-these three formulations rather than chronologically, because the distinction between them is
-what locates the gap this work fills: a numeric, per-frame intensity axis that yields a single
-identity-consistent clip. The closest generation system, FineFace \citep{varanka2024fineface},
-is prior art for action-unit-conditioned generation and is treated as such throughout.
+The systems reviewed in this chapter share one goal with the present work: producing a
+photorealistic face whose expression is directly specified. They differ in what
+they accept as that specification and in what they require as a starting point, and those two
+choices divide them into three task formulations. Expression \emph{transfer} copies the
+expression of a reference image onto a target identity, so the specification is itself an image. Expression \emph{editing} modifies a given source image, so the
+specification is a change relative to whatever expression that source already displays. Expression-conditioned \emph{generation} synthesises a face from text under a numeric action-unit condition, with no source image at all.
+
+The chapter is organised by these formulations, because what
+separates them is also what determines whether a system can meet the requirements set out in
+Section~\ref{sec:problem}. Only the third admits a numeric intensity as input without a reference
+image, which is why FineFace \citep{varanka2024fineface} serves as the reference point for the
+head-to-head comparison of Chapter~\ref{cap:preliminary-results}.
+Section~\ref{sec:rw-positioning} returns to the comparison once the three formulations have been
+examined.
 
 % =====================================================================
 \section{Expression Transfer from an Exemplar}\label{sec:rw-transfer}
@@ -46,7 +50,7 @@ and an ArcFace identity loss \citep{deng2019arcface} is applied to one-step late
 training data is manufactured: a base adaptor generates roughly 100k cross-identity expression
 triplets by face-swapping about 10k in-house images.
 
-EmojiDiff is adjacent to this work rather than competing with it. Its interface cannot accept a
+EmojiDiff is adjacent to this work in the sense that its interface cannot accept a
 numeric command such as ``smile $=0.5$'': a user must supply an exemplar image for every
 intensity level, and there is no notion of an ordered trajectory or of a sequence generated as
 one clip. It does, however, raise the standard objection to signal-conditioned methods -- loss
@@ -76,10 +80,9 @@ embedding, so the target expression is specified as a change from the source; at
 requires estimating the source image's action units first. Second, it \emph{fully} fine-tunes
 the denoising UNet and adds a UNet-sized copy as an identity encoder -- an order of magnitude
 more trainable parameters than the adaptor of Chapter~\ref{cap:method} -- trained on tens of
-thousands of same-identity pairs. It edits a given image rather than generating from text, and
+thousands of same-identity pairs. It edits a given image instead of generating it from text, and
 each edited image is independent, with no temporal mechanism. Its own lab-versus-wild ablation,
-in which a model trained on lab-recorded faces fails to generalise to natural images,
-anticipates the domain-shift limitation reported in Section~\ref{sec:res-threats}.
+in which a model trained on lab-recorded faces fails to generalise to natural images.
 
 \subsection{Intensity as a Text-Embedding Direction}\label{subsec:rw-pixelsmile}
 
@@ -96,17 +99,13 @@ anticipates the domain-shift limitation reported in Section~\ref{sec:res-threats
 %      per-frame signal this work extracts.
 
 PixelSmile \citep{hua2026pixelsmile} is the closest system in \emph{claim}: continuous, linear
-intensity control evaluated as a correlation between the commanded intensity and a detected one
--- the protocol this work adopts for calibration (Section~\ref{sec:method-evaluation}). It scales
+intensity control evaluated as a correlation between the commanded intensity and a detected one, which is the protocol this work adopts for calibration. It scales
 a text-embedding direction by a scalar $\alpha$ on an image-editing backbone with LoRA, and
-reports a correlation of $0.81$. Two points follow. First, its zero-shot row -- text-embedding
-interpolation with \emph{no} training -- already reaches $0.69$ on the same score. This is the
-``why not simply prompt it?'' objection in concrete form; it is answered not by ignoring it but
-by the prompt-engineering baseline planned in Chapter~\ref{cap:schedule}. Second, its negative
+reports a correlation of $0.81$. Two points follow. First, its zero-shot row, a text-embedding
+interpolation with \emph{no} training, already reaches $0.69$ on the same score, which gives a baseline for a prompt-only result. Second, its negative
 result on \gls{mead} does not transfer to this work: PixelSmile mapped \gls{mead}'s three
 discrete intensity levels onto $\{0.5,0.75,1.0\}$, discarding the continuous per-frame signal
-that Chapter~\ref{cap:method} extracts, so the comparison is not like-for-like. As with
-MagicFace, PixelSmile edits a source image, its levels are independent stills, and its $\alpha$
+that Chapter~\ref{cap:method} extracts, so the comparison is not in equal terms. As with MagicFace, PixelSmile edits a source image, its levels are independent stills, and its $\alpha$
 is unitless.
 
 % =====================================================================
@@ -133,9 +132,7 @@ such plainly. It generates a face from text alone, with no source image, conditi
 continuous twelve-dimensional action-unit vector, using an adapter and a rank-32 LoRA on a
 frozen backbone with classifier-free guidance on the action-unit condition, and it demonstrates
 out-of-range extrapolation of the intensity scale. Its control is \emph{broader} than the single
-AU12 axis of Chapter~\ref{cap:introduction}: twelve action units and their combinations. No
-claim of primacy for action-unit-conditioned generation is therefore available to this work, and
-none is made anywhere in this document.
+AU12 axis of Chapter~\ref{cap:introduction}: twelve action units and their combinations.
 
 What FineFace does not do is precisely the opening this work occupies. Its intensity sweep is a
 set of $N$ \emph{independent} stills that share only a random seed; nothing binds identity across
@@ -175,10 +172,7 @@ identity-consistent clip and adds the measurement the prior art omits.
     {\footnotesize Source: prepared by the author.}
 \end{table}
 
-Table~\ref{tab:positioning} summarises the comparison. The gap is narrow but real: no prior
-system produces a numeric, per-frame expression-intensity trajectory as a single
+Table~\ref{tab:positioning} summarises the comparison. It shows that no prior system produces a numeric, per-frame expression-intensity trajectory as a single
 identity-consistent clip, and none reports commanded-versus-detected calibration against an
-independent detector. The contribution is therefore the sequence-native formulation and the
-measurement protocol, not superior expression control -- ramp following ties the prior art and
-FineFace holds absolute calibration (Section~\ref{sec:res-headtohead}). That gap, and the method
+independent detector. That gap, and the method
 that fills it, is the subject of Chapter~\ref{cap:method}.

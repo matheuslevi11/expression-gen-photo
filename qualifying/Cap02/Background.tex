@@ -11,16 +11,11 @@
 % Verb tense for literature review: simple present ("X proposes Y").
 % =====================================================================
 
-This chapter introduces the machinery needed to read the method and evaluation that follow, and
-no more. It proceeds from the generative backbone outward: diffusion models
-(Section~\ref{sec:bg-diffusion}) and how they are conditioned (Section~\ref{sec:bg-conditioning});
-the temporal mechanism that turns a still-image model into a clip generator
-(Section~\ref{sec:bg-temporal}); and the camera-parameter conditioning of Generative Photography
-(Section~\ref{sec:bg-genphoto}), whose architecture this work reuses. It then turns to the
-expression side: the Facial Action Coding System (Section~\ref{sec:bg-facs}), the tools that
-estimate action units (Section~\ref{sec:bg-au-estimation}), the datasets that supply
-intensity-graded expressions (Section~\ref{sec:bg-datasets}), and the metrics used to evaluate
-control (Section~\ref{sec:bg-metrics}).
+This chapter introduces the background needed to read the method and evaluation that follow. It proceeds from the generative backbone outward: diffusion models and how they are conditioned;
+the temporal mechanism that turns a still-image model into a clip generator; and the camera-parameter conditioning of Generative Photography, whose architecture this work reuses. It then turns to the expression side: the \gls{facs}, the tools that
+estimate action units, the datasets that supply
+intensity-graded expressions, and the metrics used to evaluate
+control.
 
 % =====================================================================
 \section{Diffusion Models}\label{sec:bg-diffusion}
@@ -92,8 +87,7 @@ another, turning the 2D network into a 3D one. The consequence is central to thi
 frames of a clip are produced \emph{jointly} through temporal attention, they share a single
 identity and scene by construction. This is exactly what distinguishes a generated clip from $N$
 images sampled independently under a shared random seed: the latter are correlated only through
-their starting noise, whereas temporal attention binds them architecturally. The prior art of
-Chapter~\ref{cap:related-work} produces the former; this work produces the latter.
+their starting noise, whereas temporal attention binds them architecturally. Some models like Fineface produce the former; this work produces the latter.
 
 % =====================================================================
 \section{Parametric Control of Generative Cameras}\label{sec:bg-genphoto}
@@ -106,11 +100,10 @@ Chapter~\ref{cap:related-work} produces the former; this work produces the latte
 % and the zero-initialised merge into temporal attention.
 
 Generative Photography \citep{yuan2024genphoto} adds continuous control over camera parameters --
-focal length, bokeh, shutter speed, colour temperature -- to a frozen text-to-video backbone, and
-its architecture is reused in Chapter~\ref{cap:method}. A per-frame parameter value is turned into
+focal length, bokeh, shutter speed, colour temperature -- to a frozen text-to-video backbone. A per-frame parameter value is turned into
 a six-channel spatial conditioning tensor: three \emph{physical} channels that render the
 parameter's effect, and three channels of a text-derived signal encoding the \emph{change} in the
-parameter between consecutive frames (the construction its authors term \gls{ccl}). A small
+parameter between consecutive frames, which is called \gls{ccl}). A small
 encoder maps this tensor to features that are injected into the backbone's temporal attention
 through zero-initialised \emph{merge} weights. This work substitutes an expression-intensity axis
 for the camera axis, leaving the six-channel layout, the encoder, and the merge mechanism
@@ -126,13 +119,13 @@ unchanged; the substitution is developed in Chapter~\ref{cap:method}.
 % Mention the pre-diffusion lineage of AU-conditioned synthesis
 % \citep{pumarola2018ganimation, choi2018stargan}.
 
-The \gls{facs} \citep{ekman1978facs} decomposes any facial expression into \glspl{au}, the
-movements of individual muscles or muscle groups, each scored not only as present or absent but on
+The \gls{facs} of \citet{ekman1978facs} decomposes any facial expression into \glspl{au}, the
+movements of individual muscles or muscle groups, each scored not as simple activations but on
 a graded \emph{intensity} scale. This intensity coding is what makes a continuous control axis
 meaningful: an expression is a point on a set of graded axes rather than a discrete label. This
-work studies a single such axis, AU12 (the lip-corner puller), the defining action of a smile. AU12
+work studies focuses on AU12 (the lip-corner puller), the defining action of a smile. AU12
 is chosen because it is unambiguous, has a large and visible dynamic range, and is among the more
-reliably detected action units, so it is a clean testbed for a continuous axis while the method
+reliably detected action units, so it is a solid choice for a continuous axis while the method
 itself is not specific to it. Conditioning synthesis on action units predates diffusion: GAN-based
 systems such as GANimation \citep{pumarola2018ganimation} and StarGAN \citep{choi2018stargan}
 animate or translate expressions from action-unit or categorical labels, but without the
@@ -141,30 +134,28 @@ photorealism and text controllability of a diffusion backbone.
 % =====================================================================
 \section{Automatic Action Unit Estimation}\label{sec:bg-au-estimation}
 
-% These tools are both the source of training labels and the measuring
-% instrument, so their properties are part of the method's validity.
-%   \citep{cheong2023pyfeat}      -- py-feat, used for labels AND evaluation
-%   \citep{lugaresi2019mediapipe} -- MediaPipe blendshapes, independent check
-%   \citep{chang2024libreface}    -- LibreFace, used by the prior art
-%
-% IMPORTANT: introduce the circularity problem HERE (same estimator produces
-% labels and scores results), so that Cap04's mitigation reads as a designed
-% choice rather than a defensive afterthought. All four related papers share
-% this circularity without flagging it; this work flags and mitigates it.
+Manual \gls{facs} coding does not scale to the volume of frames required either to supervise or
+to evaluate a generative model, so action-unit intensities are obtained automatically. Three
+toolkits are relevant to this work. py-feat \citep{cheong2023pyfeat} is an open-source
+facial-analysis library that returns a per-frame score for each of twenty action units.
+LibreFace \citep{chang2024libreface} is a deep toolkit that reports intensities on the \gls{facs}
+scale and is among the estimators used by the systems of Chapter~\ref{cap:related-work}.
+MediaPipe \citep{lugaresi2019mediapipe} does not estimate action units, but its face-mesh
+landmarks support geometric proxies, such as the separation of the mouth corners, that are read
+off image geometry rather than predicted by a learned action-unit classifier.
 
-Because no dataset provides per-frame ground-truth action-unit intensities at scale, the
-intensities used here are estimated automatically. py-feat \citep{cheong2023pyfeat} predicts a
-per-frame AU intensity and is used in this work both to \emph{label} the training data and to
-\emph{score} the generated outputs. That double use is a validity concern: when the same estimator
-produces the supervision and the metric, a model can score well simply by reproducing its
-labeller's biases. The concern is raised here so that the mitigation in Chapter~\ref{cap:method}
-reads as a designed choice rather than an afterthought -- a second estimator from a different
-family, the face-mesh geometry of MediaPipe \citep{lugaresi2019mediapipe}, which produced none of
-the labels, provides an independent check, and agreement between the two is what makes a result
-trustworthy. Estimators of this kind, including LibreFace \citep{chang2024libreface}, are also used
-by the prior art. All four systems of Chapter~\ref{cap:related-work} label and score with the same
-estimator family without noting the circularity; flagging and mitigating it is part of this work's
-evaluation.
+In this work, as in
+the systems reviewed in Chapter~\ref{cap:related-work}, a single automatic estimator supplies both
+the supervision used for training and the metric used for evaluation. The two roles are not
+independent. A model trained to reproduce an estimator's readings is afterwards judged by that
+same estimator, so it can obtain a favourable score by reproducing the estimator's biases rather
+than by rendering the requested expression, and the score rises with the fit to the labeller
+whether or not the expression is correct.
+
+The established control is to measure with an instrument of a different family, one that supplied
+no training label, and to treat agreement between the two as the condition under which a result
+may be attributed to the model rather than to the shared estimator. The form this control takes
+here is described in Section~\ref{subsec:eval-circularity}.
 
 % =====================================================================
 \section{Datasets for Expression Intensity}\label{sec:bg-datasets}
@@ -182,12 +173,8 @@ evaluation.
 under controlled lighting, with three discrete emotion-intensity levels. The three levels are too
 coarse for a continuous axis; what this work extracts instead is a \emph{continuous} per-frame AU12
 value along the onset-to-apex ramp of each clip, so that a single clip supplies an ordered sequence
-of smoothly increasing intensities. This differs from the still-image action-unit datasets used by
-the prior art -- DISFA \citep{mavadati2013disfa}, with manually coded AU intensities, and AffectNet
-\citep{mollahosseini2019affectnet}, a large in-the-wild collection -- which provide isolated frames
-rather than intensity trajectories. Training on a single lab-recorded corpus carries a known cost
-that returns as a limitation in Chapter~\ref{cap:preliminary-results}: the generated faces take on
-the dataset's controlled-lighting, frontal appearance, and the model inherits its demographic skew.
+of smoothly increasing intensities. This differs from the still-image action-unit datasets like DISFA \citep{mavadati2013disfa}, with manually coded AU intensities, and AffectNet
+\citep{mollahosseini2019affectnet}, a large in-the-wild collection.
 
 % =====================================================================
 \section{Evaluation Metrics}\label{sec:bg-metrics}
@@ -211,8 +198,6 @@ linearity score (\gls{cls}) of \citet{hua2026pixelsmile}: uniformly spaced comma
 are correlated against the detected ones. Identity is measured by the cosine similarity of face
 embeddings from a recognition network \citep{schroff2015facenet, cao2018vggface2, deng2019arcface};
 image quality and prompt fidelity, where reported, use \gls{lpips} \citep{zhang2018lpips} and CLIP
-similarity. One property of the correlation is central to Chapter~\ref{cap:preliminary-results}:
-Pearson $r$ is invariant to scale and offset, so it rewards a model that \emph{orders and spaces}
-the frames correctly even when the detected values are shifted or compressed. Distinguishing
-``follows the ramp'' from ``is calibrated'' therefore requires an absolute-error metric -- the
-\gls{mse} of the detected value against the commanded one -- alongside the correlation.
+similarity. One important property of Pearson $r$ is invariance to scale and offset, which cases it to reward models that \emph{orders and spaces} the frames correctly even when the detected values are shifted or compressed. Distinguishing
+intensity following from calibration therefore requires an absolute-error metric -- the
+\gls{mse} of the detected value against the commanded one, alongside the correlation.

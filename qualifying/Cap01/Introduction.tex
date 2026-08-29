@@ -28,56 +28,73 @@
 % =====================================================================
 \section{Motivation}\label{sec:motivation}
 
-Controllable synthesis of facial expressions has broad use. Photorealistic faces with a
-specified, graded expression provide stimuli for affective-computing and behavioural studies,
-where the intensity of an expression must be varied in a controlled way; they animate avatars
-and virtual characters with believable affect; and they supply training and augmentation data
-for \gls{fer}, where labelled examples spanning the full intensity range are scarce. In each of
-these settings what matters is not merely whether a face is smiling, but \emph{how much}.
+Controllable synthesis of facial expressions has broad use, and in several of its applications
+what matters is not whether a face is smiling but \emph{how much}. Affective-computing and
+behavioural studies require stimuli whose expression intensity is varied in a controlled way, and
+that intensity is not an incidental parameter of the stimulus. Spontaneous expressions in real
+social interaction are frequently of low intensity, whereas conventional stimulus sets portray
+emotions only at their peak, a mismatch that motivated the construction of graded-intensity sets
+such as the \gls{adfes} Bath Intensity Variations \citep{wingenbach2016adfesbiv}. Its validation
+also shows that the axis is behaviourally consequential: recognition accuracy rises monotonically
+with intensity, from $56\%$ for low-intensity expressions to $68\%$ at intermediate and $75\%$ at
+high intensity. The level at which an expression is rendered therefore determines what a study
+using it can measure.
+
+The same axis is a bottleneck for data. Deep \gls{fer} is limited above all by a shortage of
+training data \citep{li2022fersurvey}, and intensity-annotated data is the scarcest kind, because
+annotating it is slow: coding action-unit intensity under the \gls{facs} \citep{ekman1978facs} can
+take an expert more than an hour for a single second of video \citep{tran2017deepcoder}. The
+corpora that do carry intensity annotation quantise it coarsely, on a six-point discrete scale in
+\gls{disfa} \citep{mavadati2013disfa} or three levels per clip in \gls{mead}
+\citep{wang2020mead}. A generator able to render a specified, continuously graded intensity on
+demand would relieve both the stimulus and the data problem, provided that the intensity it
+renders can be verified properly.
 
 Diffusion models have made photorealistic face generation routine, and text prompts give
 convenient high-level control. That control, however, is categorical: a prompt distinguishes
-``smiling'' from ``not smiling'', but has no natural way to command a smile at, say, half
-intensity, or to sweep intensity smoothly from neutral to broad. Expressing a continuous quantity
-through discrete language is the wrong instrument. What is needed is a numeric axis of expression
-intensity on which a diffusion backbone can be conditioned directly, and, for the sequences that
-behavioural stimuli and augmentation data require, an axis that varies across the frames of a
-single coherent clip rather than across unrelated images.
+``smiling'' from ``not smiling'', and although language can qualify degree, a phrase such as
+``a slight smile'' carries no reproducible mapping onto a measurable intensity. The same words
+render differently across prompts, seeds and models, and nothing in the interface allows a smile
+to be commanded at a stated fraction of its full extent. What is needed is a numeric axis of
+expression intensity on which a diffusion backbone can be conditioned directly, and, for the
+sequences that behavioural stimuli and augmentation data require, an axis that varies across the
+frames of a single coherent clip rather than across unrelated images.
 
 % =====================================================================
 \section{Problem Statement}\label{sec:problem}
 
-% The gap, stated so that the banca can see it is real and open. Anchor it
-% in the four papers studied in docs/experiments/2026-07-11-related-work-study.md:
-%   - \citet{varanka2024fineface}: AU-intensity T2I generation, but N
-%     independent stills; no identity metric at all; intensity qualitative.
-%   - \citet{wei2025magicface}: continuous AU control, but EDITING a source
-%     photo, relative (not absolute) targets, full UNet fine-tune.
-%   - \citet{hua2026pixelsmile}: intensity linearity measured, but editing,
-%     unitless alpha, and the same model builds the data and judges results.
-%   - \citet{jiang2024emojidiff}: transfer from an RGB exemplar; cannot take
-%     a numeric intensity as input.
-% None produces identity-consistent intensity *trajectories* in one
-% generated sequence, and none measures commanded-vs-detected intensity with
-% an objective facial-action detector.
+% The per-paper analysis of the four closest systems lives in
+% Chapter~\ref{cap:related-work} (source material:
+% docs/experiments/2026-07-11-related-work-study.md). This section deliberately
+% does NOT repeat it. It states the requirements a solution must satisfy, so
+% that the contributions of Section~\ref{sec:contributions} and the evaluation
+% protocol of Chapter~\ref{cap:method} can be read against them.
 
-The gap is specific. The systems closest to this problem, examined in
-Chapter~\ref{cap:related-work}, each solve a different one. FineFace \citep{varanka2024fineface}
-conditions text-to-image generation on continuous action-unit intensities, but produces each
-intensity level as an \emph{independent} still, binds identity across levels by nothing more than
-a shared random seed, reports no identity metric, and shows intensity control only qualitatively.
-MagicFace \citep{wei2025magicface} offers continuous action-unit control but \emph{edits} a source
-image, with relative rather than absolute targets and a full backbone fine-tune. PixelSmile
-\citep{hua2026pixelsmile} measures intensity linearity but is again an editing method with a
-unitless scale, and the same model both builds its data and judges its results. EmojiDiff
-\citep{jiang2024emojidiff} transfers an expression from an RGB exemplar and cannot take a numeric
-intensity as input at all.
+The problem is defined by what a solution would have to do. Three requirements follow from the
+applications of Section~\ref{sec:motivation}, and a solution must satisfy them at the same time.
 
-Two absences follow. No existing system produces identity-consistent intensity \emph{trajectories}
-within a single generated sequence, and none measures commanded-versus-detected intensity against
-an objective facial-action detector that did not also produce its training labels. That pair of
-absences, a sequence-native intensity axis and an honest measurement of it, is the opening this
-work addresses.
+\begin{itemize}
+    \item \textbf{Numeric Intensity Signal.} The intensity of the expression
+    must be specified as a number instead of vague words, and that number must govern each frame
+    individually, so that a whole trajectory from neutral to apex can be requested in a single
+    instruction.
+
+    \item \textbf{Identity and scene consistency.} If each intensity level is rendered as a separately
+    generated image, any difference observed between two levels confounds the change in intensity with a change of identity, pose and scene. For the behavioral stimuli of
+    Section~\ref{sec:motivation}, that confound is disqualifying: a response cannot be attributed
+    to the intensity of an expression if the face displaying it also changed.
+
+    \item \textbf{Independent Verification.} What was commanded must be checkable against
+    what was rendered, and the instrument performing the check must not be the one that produced
+    the training labels. Without an independent check the commanded intensity cannot be properly verified, and a model can score well by reproducing the biases of its
+    own annotator.
+\end{itemize}
+
+No existing system satisfies the three simultaneously. Chapter~\ref{cap:related-work} examines
+the closest ones and shows which requirement each relinquishes: expression transfer accepts no
+numeric intensity at all; editing methods take a source image as their reference, and so command
+a change rather than a value; and action-unit-conditioned generation renders each level as an
+independent image.
 
 % =====================================================================
 \section{Research Questions}\label{sec:research-questions}
@@ -133,26 +150,26 @@ that separately measures trajectory following, absolute calibration, and cross-f
 % =====================================================================
 \section{Hypotheses}\label{sec:hypotheses}
 
-% Each hypothesis gets an explicit supported/refuted verdict in Cap05.
-% H3 as written below is ALREADY REFUTED by the 2026-07-14 calibration
-% experiment; keeping a refuted hypothesis and reporting it honestly is
-% stronger than quietly deleting it. Discuss the framing with the advisor.
+% Verdicts deliberately kept OUT of this chapter: the hypotheses are stated
+% here and adjudicated in Cap05, one subsection each. H3 is refuted there by
+% the 2026-07-14 calibration experiment; keeping a refuted hypothesis and
+% reporting the refutation is stronger than quietly deleting it.
+%   H1 -> Section~\ref{sec:res-ramp}
+%   H2 -> Section~\ref{sec:res-headtohead}
+%   H3 -> Section~\ref{sec:res-calibration}
+
+Three hypotheses follow from the research questions above. Each is adjudicated against the
+measurements of Chapter~\ref{cap:preliminary-results}.
 
 \begin{itemize}
-    \item \textbf{H1}: Per-frame scalar conditioning on a frozen backbone yields a
-    detected intensity that follows the commanded trajectory. \emph{Supported}
-    (Chapter~\ref{cap:preliminary-results}, Section~\ref{sec:res-ramp}): the effect is
-    confirmed by an estimator that produced none of the training labels, and it
-    strengthens monotonically with training.
-    \item \textbf{H2}: Joint sequence generation preserves identity across intensity
-    levels better than independent per-level generation. \emph{Supported, modestly}
-    (Section~\ref{sec:res-headtohead}): a consistent but small advantage in the
-    worst-case adjacent-frame identity, on a majority of prompts.
-    \item \textbf{H3}: The control is absolute, that is, a commanded value maps to the
-    same detected intensity regardless of the surrounding trajectory. \emph{Refuted}
-    (Section~\ref{sec:res-calibration}): the same commanded value renders at different
-    detected intensities depending on the trajectory in which it appears. The cause is
-    traced to ramp-only video supervision.
+    \item \textbf{H1}: Per-frame scalar conditioning on a frozen backbone yields a detected
+    intensity that follows the commanded trajectory.
+    \item \textbf{H2}: Joint sequence generation preserves identity across intensity levels
+    better than independent per-level generation.
+    \item \textbf{H3}: The control is absolute, that is, a commanded value maps to the same
+    detected intensity regardless of the surrounding trajectory. Conditioning applied per frame
+    and supervised by a per-frame label should in principle fix a mapping from commanded value to
+    rendered intensity that is independent of the neighbouring frames.
 \end{itemize}
 
 % =====================================================================
@@ -176,9 +193,7 @@ that separately measures trajectory following, absolute calibration, and cross-f
     generation parameter: one text prompt and one per-frame trajectory yield a single
     identity-consistent clip, whereas the closest prior art \citep{varanka2024fineface} (FineFace)
     produces $N$ independent stills bound only by a shared random seed. Delivered by the
-    method overview and conditioning design (Sections~\ref{sec:method-overview}
-    and~\ref{sec:method-conditioning}) and evaluated in the head-to-head comparison
-    (Section~\ref{sec:res-headtohead}).
+    method overview and conditioning design and evaluated in the head-to-head comparison in Section~\ref{sec:res-headtohead}.
     \item \textbf{C2 (Evaluation protocol).} A protocol that separates three axes commonly
     conflated, namely trajectory-following, absolute calibration, and cross-frame
     identity, and that guards the label/evaluation circularity shared by the closest works
@@ -192,9 +207,7 @@ that separately measures trajectory following, absolute calibration, and cross-f
     Delivered by Section~\ref{sec:res-calibration}.
 \end{itemize}
 
-\noindent Together these establish the contribution as the sequence-native formulation and the
-evaluation protocol, not superior expression control: as Chapter~\ref{cap:preliminary-results}
-reports, ramp following ties the prior art and FineFace holds absolute calibration.
+\noindent Together these establish the contribution as the sequence-native formulation and the evaluation protocol, while also having comparable results with state-of-the-art models.
 
 % =====================================================================
 \section{Document Organization}\label{sec:organization}
@@ -204,6 +217,5 @@ the diffusion, conditioning, temporal-generation, and facial-action-coding machi
 method rests. Chapter~\ref{cap:related-work} positions the work against the closest expression
 transfer, editing, and generation systems. Chapter~\ref{cap:method} details the proposed method:
 the frozen backbone, the expression conditioning, the training data and setup, and the evaluation
-protocol. Chapter~\ref{cap:preliminary-results} reports what has been measured so far, including
-the negative calibration result. Chapter~\ref{cap:schedule} lists the completed and remaining
+protocol. Chapter~\ref{cap:preliminary-results} reports what has been measured so far. Finally, Chapter~\ref{cap:schedule} lists the completed and remaining
 work with the schedule to completion.
