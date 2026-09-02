@@ -1,4 +1,4 @@
-\chapter{Proposed Method}\label{cap:method}
+\chapter{Methodology}\label{cap:method}
 \glsresetall
 
 % Ground truth for every claim: docs/status.md and the dated entries in
@@ -73,9 +73,8 @@ Figure~\ref{fig:system} shows a pipeline overview.
 injected into the backbone's temporal attention, while the text prompt conditions the
 backbone through CLIP; the backbone output is decoded by the VAE. Trained components are
 orange (the expression encoder and the temporal-attention merge); the backbone, VAE and
-CLIP text encoder are frozen (blue).}
+CLIP text encoder are frozen (blue). Source: prepared by the author.}
 \label{fig:system}
-{\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
@@ -86,7 +85,7 @@ The backbone is inherited whole and kept frozen: the SD1.5 UNet, the \gls{vae}, 
 \gls{lora} \citep{hu2022lora} that is part of the released backbone.
 Only two components are trained: the \emph{expression encoder} and the attention
 merge weights that inject its output into the UNet. The implementation sets the
-spatial attention processors trainable and then re-freezes every parameter related to LoRA, so those layers are a frozen backbone component and are not adapted. Table~\ref{tab:method-components} lists the components and the parameter
+spatial attention processors trainable and then re-freezes every parameter related to \gls{lora}, so those layers are a frozen backbone component and are not adapted. Table~\ref{tab:method-components} lists the components and the parameter
 counts.
 
 \begin{table}[t]
@@ -162,7 +161,7 @@ a fixed reference point.
 
 Training data is derived from the front-view \emph{happy} clips of \gls{mead}
 \citep{wang2020mead}. Faces are cropped with MediaPipe \citep{lugaresi2019mediapipe}, and
-each frame is labelled with a continuous AU intensity from py-feat
+each frame is labelled with a continuous \gls{au} intensity from py-feat
 \citep{cheong2023pyfeat}. Raw \gls{mead} provides three discrete intensity levels per
 clip; the dataset composes monotonically increasing \emph{ramps} of $F$ frames by sorting frames by labelled intensity, spanning the onset-to-apex portion of each clip. The split contains
 4{,}028 training and 176 validation clips. The validation identities do not appear in training to ensure there isn't an identity leakage into the validation signal. \gls{mead} happy clips carry substantial AU12 even at their lowest labelled level, which biases the low end of the intensity range upward.
@@ -228,7 +227,7 @@ and transfer methods, where a high value can instead indicate that little editin
 
 \subsection{Label--Evaluation Circularity}\label{subsec:eval-circularity}
 
-The AU estimator py-feat produces both the training labels and the primary AU12 metric. A model could
+The \gls{au} estimator py-feat produces both the training labels and the primary AU12 metric. A model could
 therefore obtain a favourable score by reproducing the biases of its own labeller rather
 than by rendering the commanded expression. A second estimator from a different family is
 used as a control: a smile proxy computed from MediaPipe FaceMesh mouth-corner geometry

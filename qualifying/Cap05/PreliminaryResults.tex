@@ -105,7 +105,7 @@ with an ArcFace embedding is scheduled as proposed work in Chapter~\ref{cap:sche
         Frozen backbone baseline & $0.853 \pm 0.128$ & $0.794 \pm 0.152$ & $52/120$ \\
         \bottomrule
     \end{tabular}\\[4pt]
-    {\footnotesize Source: prepared by the author. facenet-VGGFace2 embeddings, $n=120$ per condition. Face detected counts the samples in which a face was recoverable for the identity measurement; the baseline's cosines are computed on that subset only, so the gaps are lower bounds.}
+    {\footnotesize Source: prepared by the author. facenet-VGGFace2 embeddings, $n=120$ per condition.}
 \end{table}
 
 % =====================================================================
@@ -164,11 +164,12 @@ inherited from the frozen backbone.
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.78\textwidth]{images/2026-08-11-dose-response.pdf}
-    \caption{Ramp-control fidelity against training steps, at six checkpoints of the single
-    training run ($n=120$ ramps per checkpoint, bands $\pm1$ SEM). Both the py-feat AU12
-    correlation and the label-independent MediaPipe proxy rise and plateau.}
+    \caption[Ramp-control fidelity against training steps.]{Ramp-control fidelity against training
+    steps, at six checkpoints of the single training run ($n=120$ ramps per checkpoint, bands
+    $\pm1$ standard error of the mean). Both the py-feat AU12 correlation and the
+    label-independent MediaPipe proxy rise and plateau. Source: prepared by the author, from lab
+    note 2026-08-11.}
     \label{fig:dose}
-    {\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
@@ -230,13 +231,14 @@ Chapter~\ref{cap:schedule}.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.72\textwidth]{images/2026-08-25-au-coactivation-profile.pdf}
-    \caption{Per-action-unit response to the AU12 ramp (Spearman $r$, trained adaptor versus
-    frozen baseline). The smile cluster (AU12, AU6, AU25) co-activates and the mouth-closing
-    units (AU23, AU17) anti-correlate, while brow units are near zero. Asterisks mark units
-    significantly modulated by training ($q<0.05$, Benjamini--Hochberg).}
+    \includegraphics[width=\textwidth]{images/2026-08-25-au-coactivation-profile.pdf}
+    \caption[Whole-face response to the AU12 ramp.]{Per-action-unit response to the AU12 ramp
+    (Spearman $r$, trained adaptor versus frozen baseline). The smile cluster (AU12, AU6, AU25)
+    co-activates and the mouth-closing units (AU23, AU17) anti-correlate, while brow units are
+    near zero. Asterisks mark units significantly modulated by training ($q<0.05$,
+    Benjamini--Hochberg), and units drawn in grey were detected in fewer than half of the clips
+    and are therefore treated as not reliably estimable. Source: prepared by the author}
     \label{fig:coactivation}
-    {\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
@@ -258,13 +260,13 @@ adaptor pulls the output toward the lab-recorded \gls{mead} appearance it was tr
 \begin{figure}[t]
     \centering
     \includegraphics[width=\textwidth]{images/2026-08-25-qualitative-ramp.pdf}
-    \caption{One ascending ramp (prompt: ``a portrait photograph of a young woman, frontal
-    view, neutral background''; seed 42), with commanded intensity $s_t$ increasing left to
-    right. Top: the trained adaptor, where the smile intensifies while identity is preserved
-    across frames. Bottom: the frozen backbone under the same seed, left unchanged by the
-    commanded trajectory.}
+    \caption[Trained adaptor and frozen backbone on one ascending ramp.]{One ascending ramp
+    (prompt: ``a portrait photograph of a young woman, frontal view, neutral background''; seed
+    42), with commanded intensity $s_t$ increasing left to right. Top: the trained adaptor, where
+    the smile intensifies while identity is preserved across frames. Bottom: the frozen backbone
+    under the same seed, left unchanged by the commanded trajectory. Source: prepared by the
+    author.}
     \label{fig:qualitative}
-    {\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
@@ -272,9 +274,8 @@ adaptor pulls the output toward the lab-recorded \gls{mead} appearance it was tr
 \todo[inline]{Review if this section is necessary}
 
 \begin{itemize}
-    \item \textbf{Label--evaluation circularity.} py-feat provides both the training labels and the primary metric. Mitigated by the independent MediaPipe measurement (Section~\ref{subsec:eval-circularity}), which agreed, but not eliminated.
-    \item \textbf{Demographic bias.} Ramp $r$ is $0.83$ for female prompts against $0.71$ for male prompts. The prior art shows the opposite skew (FineFace: $0.82$ male against $0.77$ female), which localises the cause to the \gls{mead} training distribution rather than to AU-conditioned generation in general.
+    \item \textbf{Label--evaluation circularity.} py-feat provides both the training labels and the primary metric. This is already mitigated by the independent MediaPipe measurement in Section~\ref{subsec:eval-circularity}, but not eliminated.
+    \item \textbf{Demographic bias.} Ramp $r$ is $0.83$ for female prompts against $0.71$ for male prompts. FineFace shows the opposite skew ($0.82$ male against $0.77$ female), which localises the cause to the \gls{mead} training distribution rather than to AU-conditioned generation in general.
     \item \textbf{Lab-domain training data.} A single dataset, a single emotion category, frontal views, controlled lighting. Generalisation to in-the-wild portraits is untested.
-    \item \textbf{Single control axis.} Only AU12 is conditioned. The whole-face analysis (Section~\ref{sec:res-coactivation}) shows the axis co-activates the entire smile cluster and cannot isolate a single unit; the prior art controls twelve action units and their combinations. A multi-AU axis is proposed in Chapter~\ref{cap:schedule}.
-    \item \textbf{Single training run.} One seed, one checkpoint; no variance estimate over training runs.
+    \item \textbf{Single control axis.} Only AU12 is conditioned. The whole-face analysis shows the axis co-activates the entire smile cluster and cannot isolate a single unit; the prior art controls twelve action units and their combinations. A multi-AU axis is proposed in Chapter~\ref{cap:schedule}.
 \end{itemize}

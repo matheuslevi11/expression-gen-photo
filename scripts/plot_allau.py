@@ -31,6 +31,7 @@ plt.rcParams.update({
     "font.size": 11, "font.family": "DejaVu Sans", "axes.edgecolor": MUTED,
     "axes.linewidth": 0.8, "text.color": INK, "axes.labelcolor": INK,
     "xtick.color": MUTED, "ytick.color": MUTED,
+    "xtick.labelsize": 10.5, "ytick.labelsize": 10.5,
 })
 
 
@@ -66,7 +67,7 @@ def fig_profile(S, out):
         # label; star if significant vs baseline (q<0.05)
         sig = diff[au].get("significant_q05", False)
         label = au + (" *" if sig else "")
-        ax.text(-1.06, y, label, ha="right", va="center", fontsize=9.5,
+        ax.text(-1.06, y, label, ha="right", va="center", fontsize=11,
                 color=INK if estimable else MUTED,
                 fontweight="bold" if sig else "normal")
 
@@ -74,13 +75,13 @@ def fig_profile(S, out):
     ax.set_xlim(-1.08, 1.05)
     ax.set_ylim(0.3, len(order) + 0.7)
     ax.set_yticks([])
-    ax.set_xlabel("ramp correlation  (Spearman $r$ of detected AU vs commanded intensity)")
-    ax.set_title("Whole-face AU response to the AU12 ramp", fontsize=12.5, fontweight="bold", pad=26)
+    ax.set_xlabel("ramp correlation  (Spearman $r$ of detected AU vs commanded intensity)",
+                  fontsize=11.5)
+    ax.set_title("Whole-face AU response to the AU12 ramp", fontsize=14, fontweight="bold", pad=10)
     ax.plot([], [], "o", mfc="white", mec=BLUE, mew=1.8, ms=8, label="trained (100k)")
     ax.plot([], [], "s", mfc="white", mec=VERM, mew=1.6, ms=6, label="frozen baseline")
-    ax.legend(loc="upper left", frameon=False, fontsize=9.5, borderaxespad=0.4)
-    ax.text(1.03, len(order) + 0.4, "* q<0.05 (BH-FDR) vs baseline · grey = not estimable",
-            ha="right", va="bottom", fontsize=7.6, color=MUTED)
+    ax.plot([], [], "o", mfc="white", mec=GRID, mew=1.8, ms=8, label="not estimable")
+    ax.legend(loc="upper left", frameon=False, fontsize=11, borderaxespad=0.4)
     for sp in ("top", "right", "left"):
         ax.spines[sp].set_visible(False)
     ax.grid(axis="x", color=GRID, lw=0.6)

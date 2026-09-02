@@ -123,20 +123,22 @@ in Chapter~\ref{cap:method}, Section~\ref{sec:method-overview}.
 
 \medskip
 \noindent\textbf{RQ1}: Can a scalar expression-intensity axis be injected into a frozen
-\gls{t2v} backbone by the same conditioning mechanism that \citet{yuan2024genphoto} apply
-to camera parameters, such that the detected AU12 intensity follows a commanded per-frame
-trajectory?
+\gls{t2v} backbone by a small trainable adaptor, such that the detected AU12 intensity follows a
+commanded per-frame trajectory?
 
 \noindent\textbf{RQ2}: Does generating the intensity levels jointly, as a single
 sequence, preserve identity across levels better than generating each level as an
 independent still?
 
-\noindent\textbf{RQ3}: Is the resulting control absolute, so that a commanded value maps
-to a fixed detected intensity, or is it relative to the commanded trajectory, and what
-property of the training data determines which?
+\noindent\textbf{RQ3}: Is the resulting control absolute, or only order-preserving, and what
+determines which of the two holds?
 
 % =====================================================================
 \section{Objectives}\label{sec:objectives}
+
+Answering the research questions above requires a generator in which expression intensity is a
+commandable per-frame parameter, and a measurement able to decide whether a commanded value was
+in fact rendered. The objectives below cover both.
 
 \subsection{General Objective}\label{subsec:general-objective}
 

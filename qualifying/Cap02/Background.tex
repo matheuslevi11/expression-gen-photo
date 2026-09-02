@@ -1,4 +1,4 @@
-\chapter{Background}\label{cap:background}
+\chapter{Theoretical Foundation}\label{cap:background}
 \glsresetall
 
 % =====================================================================
@@ -36,7 +36,7 @@ schedule takes $\bar\alpha_t$ from near one at $t=1$ to near zero at $t=T$, so t
 from the data sample towards pure noise as $t$ grows. In
 practice the network $\epsilon_\theta$ is trained to predict the added noise, minimising
 $\mathbb{E}_{x_0,\epsilon,t}\,\lVert \epsilon - \epsilon_\theta(x_t,t) \rVert^2$; generation then
-denoises from pure noise, and DDIM \citep{song2021ddim} makes this deterministic and possible in
+denoises from pure noise, and \gls{ddim} \citep{song2021ddim} makes this deterministic and possible in
 few steps. Operating in pixel space is costly, so latent diffusion \citep{rombach2022ldm} runs the
 process in the compressed latent space of a pretrained \gls{vae}, whose encoder maps images to
 latents for training and whose decoder maps generated latents back to pixels. Stable Diffusion,
@@ -139,9 +139,8 @@ layout, the encoder, and the merge mechanism unchanged; this process is describe
     \centering
     \includegraphics[width=0.85\textwidth]{images/genphoto-fig-4.png}
     \caption[Differential encoder of Generative Photography.]{The differential encoder that
-    produces the change-encoding channels of Generative Photography. Section~\ref{subsec:method-ccl} adapts this construction to expression-intensity prompts.}
+    produces the change-encoding channels of Generative Photography. Section~\ref{subsec:method-ccl} adapts this construction to expression-intensity prompts. Source: reproduced from \citet{yuan2024genphoto}, Figure~4.}
     \label{fig:genphoto-encoder}
-    {\footnotesize Source: reproduced from \citet{yuan2024genphoto}, Figure~4.}
 \end{figure}
 
 % =====================================================================
@@ -177,7 +176,7 @@ facial-analysis library that returns a per-frame score for each of twenty action
 scale and is among the estimators used by the systems of Chapter~\ref{cap:related-work}.
 \texttt{MediaPipe} \citep{lugaresi2019mediapipe} does not estimate action units, but its face-mesh
 landmarks support geometric proxies, such as the separation of the mouth corners, that are read
-off image geometry rather than predicted by a learned action-unit classifier.
+off image geometry and provide a diversified perspective on facial expressions compared to an action-unit classifier.
 
 In this work, as in
 the systems reviewed in Chapter~\ref{cap:related-work}, a single automatic estimator supplies both
@@ -205,11 +204,23 @@ here is described in Section~\ref{subsec:eval-circularity}.
 % demographic bias) -- it comes back as a limitation in Cap05.
 
 \gls{mead} \citep{wang2020mead} is a multi-view, emotion-labelled corpus of talking faces recorded
-under controlled lighting, with three discrete emotion-intensity levels. The three levels are too
+under controlled lighting, with three discrete emotion-intensity levels (Figure~\ref{fig:mead}).
+The three levels are too
 coarse for a continuous axis; what this work extracts instead is a \emph{continuous} per-frame AU12
 value along the onset-to-apex ramp of each clip, so that a single clip supplies an ordered sequence
-of smoothly increasing intensities. This differs from the still-image action-unit datasets like DISFA \citep{mavadati2013disfa}, with manually coded AU intensities, and AffectNet
+of smoothly increasing intensities. This differs from the still-image action-unit datasets like \gls{disfa} \citep{mavadati2013disfa}, with manually coded AU intensities, and AffectNet
 \citep{mollahosseini2019affectnet}, a large in-the-wild collection.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{images/MEAD-data.png}
+    \caption[Composition of the MEAD corpus.]{Composition of \gls{mead}. Rows, from top to bottom:
+    the seven emotion categories; the intensity annotation, three levels per emotion together with
+    a neutral condition; the seven camera angles; and a sample of the actors. This work uses the
+    front view of the happy clips only (Section~\ref{sec:method-data}). Source: reproduced from
+    \citet{wang2020mead}.}
+    \label{fig:mead}
+\end{figure}
 
 % =====================================================================
 \section{Evaluation Metrics}\label{sec:bg-metrics}

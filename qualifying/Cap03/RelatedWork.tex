@@ -22,8 +22,7 @@ inputs, an exemplar carrying the expression and a reference carrying the identit
 specification is itself an image. Expression \emph{editing} requires the photograph to be
 modified and takes a numeric specification, but one that is \emph{relative} to the expression the
 source already displays, which obliges the user to estimate that expression before commanding a
-change. Expression-conditioned \emph{generation} requires no starting image and takes an absolute
-numeric action-unit condition alongside a text prompt.
+change. Expression-conditioned \emph{generation} requires no starting image and takes a numeric action-unit condition alongside a text prompt.
 
 The chapter is organised by these formulations, because what
 separates them is also what determines whether a system can meet the requirements set out in
@@ -79,13 +78,13 @@ and is answered by the independent-detector evaluation of Section~\ref{sec:metho
 MagicFace \citep{wei2025magicface} is the closest system in control \emph{semantics}: it
 conditions on a continuous twelve-dimensional action-unit vector on a Stable Diffusion backbone.
 Two design choices set it apart from this work. First, its condition is a \emph{relative} AU
-\emph{variation} (target minus source), injected through a single linear layer added to the time
+\emph{variation}, injected through a single linear layer added to the time
 embedding, so the target expression is specified as a change from the source; at inference this
 requires estimating the source image's action units first. Second, it \emph{fully} fine-tunes
 the denoising UNet and adds a UNet-sized copy as an identity encoder -- an order of magnitude
 more trainable parameters than the adaptor of Chapter~\ref{cap:method} -- trained on tens of
 thousands of same-identity pairs. It edits a given image instead of generating it from text, and
-each edited image is independent, with no temporal mechanism. Its own lab-versus-wild ablation,
+each edited image is independent, with no temporal mechanism. Its own ablation,
 in which a model trained on lab-recorded faces, fails to generalise to natural images.
 
 \subsection{Intensity as a Text-Embedding Direction}\label{subsec:rw-pixelsmile}
@@ -104,7 +103,7 @@ in which a model trained on lab-recorded faces, fails to generalise to natural i
 
 PixelSmile \citep{hua2026pixelsmile} is the closest system in \emph{claim}: continuous, linear
 intensity control evaluated as a correlation between the commanded intensity and a detected one, which is the protocol this work adopts for calibration. It scales
-a text-embedding direction by a scalar $\alpha$ on an image-editing backbone with LoRA, and
+a text-embedding direction by a scalar $\alpha$ on an image-editing backbone with \gls{lora}, and
 reports a correlation of $0.81$. Two points follow. First, its zero-shot row, a text-embedding
 interpolation with \emph{no} training, already reaches $0.69$ on the same score, which gives a baseline for a prompt-only result. Second, its negative
 result on \gls{mead} does not transfer to this work: PixelSmile mapped \gls{mead}'s three
@@ -133,8 +132,7 @@ is unitless.
 
 FineFace \citep{varanka2024fineface} is the prior art for this work's task, and is stated as
 such plainly. It generates a face from text alone, with no source image, conditioned on a
-continuous twelve-dimensional action-unit vector, using an adapter and a rank-32 LoRA on a
-frozen backbone with classifier-free guidance on the action-unit condition, and it demonstrates
+continuous twelve-dimensional action-unit vector, using an adapter and \gls{lora} on a frozen backbone with classifier-free guidance on the action-unit condition, and it demonstrates
 out-of-range extrapolation of the intensity scale. Its control is \emph{broader} than the single
 AU12 axis of Chapter~\ref{cap:introduction}: twelve action units and their combinations.
 
@@ -170,7 +168,6 @@ identity-consistent clip and adds the measurement the prior art omits.
         Source image       & required                   & not required                     & not required \\
         Identity across levels & loss term (single image) & no mechanism, no metric        & temporal attention (measured) \\
         Intensity reported as & aggregate error / VLM-judged & qualitative sweeps          & correlation + absolute error \\
-        Label/eval circularity & unflagged               & unflagged                        & flagged and mitigated \\
         \bottomrule
     \end{tabularx}\\[4pt]
     {\footnotesize Source: prepared by the author.}
