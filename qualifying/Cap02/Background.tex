@@ -29,7 +29,11 @@ control.
 
 A diffusion model \citep{ho2020ddpm} defines a forward process that gradually corrupts a data
 sample $x_0$ into noise over $T$ steps, $x_t = \sqrt{\bar\alpha_t}\,x_0 +
-\sqrt{1-\bar\alpha_t}\,\epsilon$ with $\epsilon\sim\mathcal{N}(0,I)$, and learns to reverse it. In
+\sqrt{1-\bar\alpha_t}\,\epsilon$ with $\epsilon\sim\mathcal{N}(0,I)$, and learns to reverse it.
+The coefficients come from a fixed variance schedule $\beta_1,\dots,\beta_T$ with
+$\beta_t\in(0,1)$: writing $\alpha_t=1-\beta_t$ and $\bar\alpha_t=\prod_{i=1}^{t}\alpha_i$, the
+schedule takes $\bar\alpha_t$ from near one at $t=1$ to near zero at $t=T$, so that $x_t$ moves
+from the data sample towards pure noise as $t$ grows. In
 practice the network $\epsilon_\theta$ is trained to predict the added noise, minimising
 $\mathbb{E}_{x_0,\epsilon,t}\,\lVert \epsilon - \epsilon_\theta(x_t,t) \rVert^2$; generation then
 denoises from pure noise, and DDIM \citep{song2021ddim} makes this deterministic and possible in
@@ -53,21 +57,42 @@ conditioning mechanism below acts on its denoising network.
 %      cross-attention" and "zero-initialised merge", both used in Cap04.
 
 Text-to-image diffusion conditions the denoising network on a prompt encoded by a CLIP text
-encoder \citep{radford2021clip} and injected through cross-attention layers, in which the image
-features attend to the text tokens. This conditioning is effective but \emph{categorical}: a prompt
-can say ``smiling'' or ``not smiling'', but expressing \emph{how much} of an expression is present,
-on a continuous scale, is beyond what a text token cleanly encodes. Classifier-free guidance
-\citep{ho2022cfg} sharpens adherence to any condition by extrapolating between the conditional and
-unconditional predictions at sampling time, and applies to non-text conditions as well.
+encoder \citep{radford2021clip} and injected through cross-attention. In such a layer the spatial
+features of the image supply the queries $Q$ while the encoded prompt supplies the keys $K$ and
+values $V$, and the layer returns $\mathrm{softmax}(QK^{\top}/\sqrt{d})\,V$, so each spatial
+position reads from the token embeddings relevant to it. The interface is expressive but
+\emph{categorical}: the condition is assembled from a discrete vocabulary, and a prompt selects a
+point in embedding space rather than a position along a measured axis. That space can be traversed
+continuously, and interpolating between the embeddings of two prompts does produce graded
+expressions \citep{hua2026pixelsmile}, but the interpolation coefficient is unitless, bearing no
+fixed relation to any quantity an external estimator reports.
+
+Classifier-free guidance \citep{ho2022cfg} sharpens adherence to a condition $c$ at sampling time
+by extrapolating away from the unconditional prediction,
+%
+\begin{equation}\label{eq:cfg}
+    \tilde{\epsilon}_\theta(x_t,c) = \epsilon_\theta(x_t,\varnothing)
+    + w\left[\epsilon_\theta(x_t,c) - \epsilon_\theta(x_t,\varnothing)\right],
+\end{equation}
+%
+where $w$ is the guidance scale. The construction requires the network to have learned a null
+condition $\varnothing$, obtained by dropping $c$ on a fraction of training steps. Nothing in it is
+specific to text, so it applies to any condition that can be dropped during training.
 
 Rather than fine-tuning the whole backbone, control is increasingly added by small modules on a
 \emph{frozen} network. ControlNet \citep{zhang2023controlnet} attaches a trainable copy of the
-encoder for spatial conditions; IP-Adapter \citep{ye2023ipadapter} adds an image condition through
-\emph{decoupled cross-attention}, a parallel attention branch whose output is summed into the text
-branch; and \gls{lora} \citep{hu2022lora} injects low-rank updates into existing weight matrices.
-Two ideas from this literature recur in Chapter~\ref{cap:method}: decoupled cross-attention, and
-the \emph{zero-initialised merge} -- initialising an injected branch to zero so that, before
-training, the modified model is identical to the frozen original.
+encoder for spatially structured conditions and connects it to the frozen network through
+convolutions whose weights start at zero, so the augmented model reproduces the original exactly
+before training. IP-Adapter \citep{ye2023ipadapter} adds an image condition through
+\emph{decoupled cross-attention}: a second branch computes attention from the new condition using
+the same queries as the text branch, and the two are summed,
+$Z = \mathrm{Attn}(Q,K_\text{text},V_\text{text}) + \lambda\,\mathrm{Attn}(Q,K_c,V_c)$, so the
+condition enters without displacing the prompt. \gls{lora} \citep{hu2022lora} injects a low-rank
+update $\Delta W = BA$ into an existing weight matrix, with $B$ initialised to zero so the update
+begins inert. Two ideas from this literature recur in Chapter~\ref{cap:method}: an attention branch
+that carries a non-text condition alongside the prompt, and the \emph{zero-initialised merge}, an
+injected branch initialised so that the modified model is identical to the frozen original before
+training.
 
 % =====================================================================
 \section{Temporal Generation and Motion Modules}\label{sec:bg-temporal}
@@ -85,12 +110,12 @@ A still-image diffusion model generates each image independently. AnimateDiff
 the 2D UNet: temporal-attention layers that let the feature maps of different frames attend to one
 another, turning the 2D network into a 3D one. The consequence is central to this work. Because the
 frames of a clip are produced \emph{jointly} through temporal attention, they share a single
-identity and scene by construction. This is exactly what distinguishes a generated clip from $N$
+identity and scene by construction. This is exactly what distinaguishes a generated clip from $N$
 images sampled independently under a shared random seed: the latter are correlated only through
 their starting noise, whereas temporal attention binds them architecturally. Some models like Fineface produce the former; this work produces the latter.
 
 % =====================================================================
-\section{Parametric Control of Generative Cameras}\label{sec:bg-genphoto}
+\section{Generative Camera Control}\label{sec:bg-genphoto}
 
 % The direct antecedent, presented here as background rather than as
 % related work because the method in Cap04 reuses its mechanism verbatim.
@@ -99,15 +124,25 @@ their starting noise, whereas temporal attention binds them architecturally. Som
 % learning (\gls{ccl}) text encoding that represents *change between frames*,
 % and the zero-initialised merge into temporal attention.
 
+
 Generative Photography \citep{yuan2024genphoto} adds continuous control over camera parameters --
 focal length, bokeh, shutter speed, colour temperature -- to a frozen text-to-video backbone. A per-frame parameter value is turned into
 a six-channel spatial conditioning tensor: three \emph{physical} channels that render the
 parameter's effect, and three channels of a text-derived signal encoding the \emph{change} in the
-parameter between consecutive frames, which is called \gls{ccl}). A small
-encoder maps this tensor to features that are injected into the backbone's temporal attention
-through zero-initialised \emph{merge} weights. This work substitutes an expression-intensity axis
-for the camera axis, leaving the six-channel layout, the encoder, and the merge mechanism
-unchanged; the substitution is developed in Chapter~\ref{cap:method}.
+parameter between consecutive frames, which is called \gls{ccl}. Figure~\ref{fig:genphoto-encoder}
+shows how that second signal is built. A small encoder maps the tensor to features that are
+injected into the backbone's temporal attention through zero-initialised \emph{merge} weights.
+This work substitutes an expression-intensity axis for the camera axis, leaving the six-channel
+layout, the encoder, and the merge mechanism unchanged; this process is described in Chapter~\ref{cap:method}.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\textwidth]{images/genphoto-fig-4.png}
+    \caption[Differential encoder of Generative Photography.]{The differential encoder that
+    produces the change-encoding channels of Generative Photography. Section~\ref{subsec:method-ccl} adapts this construction to expression-intensity prompts.}
+    \label{fig:genphoto-encoder}
+    {\footnotesize Source: reproduced from \citet{yuan2024genphoto}, Figure~4.}
+\end{figure}
 
 % =====================================================================
 \section{Facial Expression Representation}\label{sec:bg-facs}
@@ -136,11 +171,11 @@ photorealism and text controllability of a diffusion backbone.
 
 Manual \gls{facs} coding does not scale to the volume of frames required either to supervise or
 to evaluate a generative model, so action-unit intensities are obtained automatically. Three
-toolkits are relevant to this work. py-feat \citep{cheong2023pyfeat} is an open-source
+toolkits are relevant to this work. \texttt{py-feat} \citep{cheong2023pyfeat} is an open-source
 facial-analysis library that returns a per-frame score for each of twenty action units.
-LibreFace \citep{chang2024libreface} is a deep toolkit that reports intensities on the \gls{facs}
+\texttt{LibreFace} \citep{chang2024libreface} is a deep toolkit that reports intensities on the \gls{facs}
 scale and is among the estimators used by the systems of Chapter~\ref{cap:related-work}.
-MediaPipe \citep{lugaresi2019mediapipe} does not estimate action units, but its face-mesh
+\texttt{MediaPipe} \citep{lugaresi2019mediapipe} does not estimate action units, but its face-mesh
 landmarks support geometric proxies, such as the separation of the mouth corners, that are read
 off image geometry rather than predicted by a learned action-unit classifier.
 

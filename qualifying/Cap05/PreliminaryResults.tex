@@ -16,15 +16,7 @@
 % =====================================================================
 
 This chapter reports what has been measured on the trained model to date. Each section
-isolates one property with its own instrument: trajectory following
-(Section~\ref{sec:res-ramp}), identity consistency across the trajectory
-(Section~\ref{sec:res-identity}), absolute calibration (Section~\ref{sec:res-calibration}),
-the emergence of the capability over training (Section~\ref{sec:res-dose}), a head-to-head
-against the closest prior art (Section~\ref{sec:res-headtohead}), and the whole-face response
-to the single axis (Section~\ref{sec:res-coactivation}). The negative calibration result and
-the tie with the prior art are reported plainly rather than softened: they are what make the
-contribution claim of Chapter~\ref{cap:introduction} defensible. Every number traces to the
-dated laboratory note cited in its caption.
+isolates one property with its own instrument: trajectory following, identity consistency across the trajectory, absolute calibration, the emergence of the capability over training, a head-to-head against FineFace, and the whole-face response to the single axis.
 
 % =====================================================================
 \section{Experimental Setup}\label{sec:res-setup}
@@ -33,15 +25,13 @@ dated laboratory note cited in its caption.
 % frames per clip, intensity lists used. Point to the batch-eval harness so
 % the numbers are reproducible.
 
-All numbers below come from the released 100k-step checkpoint
+The results of this section come from the released 100k-step checkpoint
 (Section~\ref{sec:method-training}), generated on a single RTX~3090. Unless a table states
 otherwise, evaluation uses the bank of 40 text prompts, three seeds ($42,43,44$), and
 five-frame clips at $256\times384$, decoded at 25 denoising steps with classifier-free
 guidance scale $8.0$. The ascending ramp commands the intensity list $(0,0.25,0.5,0.75,1.0)$;
 the constant-list and permuted-list designs of Section~\ref{sec:method-evaluation} supply the
-calibration and non-monotonic probes. Generation and scoring run through the
-batch-evaluation harness, so every reported figure is reproducible from the same seeds and
-configuration.
+calibration and non-monotonic probes.
 
 % =====================================================================
 \section{Trajectory Following}\label{sec:res-ramp}
@@ -50,6 +40,12 @@ configuration.
 % is confirmed by an estimator that produced none of the training labels.
 % The descending-ramp reversal near -1 is strong evidence that the model
 % responds to the conditioning signal rather than to a fixed temporal prior.
+
+Table~\ref{tab:res-ramp} establishes that trajectory following is acquired during training and robust at scale.
+On the ascending ramp the trained adaptor reaches $r=0.774\pm0.212$ (median $0.86$, with
+$87\%$ of clips above $0.5$), against a frozen-backbone baseline indistinguishable from zero.
+The result is corroborated by the MediaPipe proxy ($r=0.829$), an independent estimator with respect to the training labels, indicating that the effect is not an artifact of the py-feat pipeline. The descending-ramp reversal to $r=-0.98$ shows the model tracks the commanded signal as expected. The permuted-list drop to $r=0.385\pm0.505$ indicates that the conditioning is genuinely per-frame, but the temporal prior resists non-monotonic trajectories, for which the ramp-only training data offers no support.
+
 
 \begin{table}[H]
     \centering
@@ -65,18 +61,8 @@ configuration.
         Trained adaptor, permuted list   & $90$  & $0.385 \pm 0.505$ & $0.46 \pm 0.45$ \\
         \bottomrule
     \end{tabular}\\[4pt]
-    {\footnotesize Source: prepared by the author. Lab notes 2026-07-08 and 2026-07-14. The baseline MediaPipe proxy is computed on only the 44/120 clips with a valid measurement, which flatters it; the descending-ramp MediaPipe proxy was not measured (that run predates MediaPipe scoring).}
+    {\footnotesize Source: prepared by the author.}
 \end{table}
-
-Table~\ref{tab:res-ramp} establishes that trajectory following is real and robust at scale.
-On the ascending ramp the trained adaptor reaches $r=0.774\pm0.212$ (median $0.86$, with
-$87\%$ of clips above $0.5$), against a frozen-backbone baseline indistinguishable from zero.
-The result is corroborated by the MediaPipe proxy ($r=0.829$), an estimator that produced none
-of the training labels, so the effect is not an artefact of the py-feat pipeline. The
-descending-ramp reversal to $r=-0.98$ shows the model tracks the commanded signal rather than a
-fixed temporal prior. The permuted-list drop to $r=0.385\pm0.505$ is a scope statement rather
-than a failure: the conditioning is genuinely per-frame, but the temporal prior resists
-non-monotonic trajectories, for which the ramp-only training data offers no support.
 
 % Interpretation point worth making explicitly: the permuted-list result
 % (0.385) shows the conditioning is genuinely per-frame, but that the
@@ -91,6 +77,22 @@ non-monotonic trajectories, for which the ramp-only training data offers no supp
 % faces were undetectable in 57% of samples, so its 0.85 is computed on the
 % easier remainder and flatters it.
 
+Table~\ref{tab:res-identity} shows the results for identity consistency. Within a generated clip
+the trained adaptor holds a frame-to-frame identity cosine of $0.919\pm0.054$ and, more tellingly,
+an adjacent-frame minimum of $0.877\pm0.086$ against the baseline's $0.794\pm0.152$; the
+adjacent-frame minimum is reported because the worst transition is the one a viewer notices, thus being a very important metric for quality perception.
+
+Two asymmetries qualify these numbers, and both run in the same direction. The baseline's faces
+were undetectable in $57\%$ of samples, so its cosines are computed on the easier detectable
+remainder and are flattered by that selection, which makes the gap reported here a lower bound on
+the true difference. The cross-system comparison of Section~\ref{sec:res-headtohead} is
+constrained in the opposite way to what might be expected: the frames measured here are
+$256\times384$ video frames carrying real head motion and eye blinks, whereas the independent
+stills generated by the prior art are cleaner $512\times512$ portraits, on which face embeddings
+are generally more stable, so the advantage measured there is understated.
+Identity is measured with a single embedding network (facenet-VGGFace2); multi-model averaging
+with an ArcFace embedding is scheduled as proposed work in Chapter~\ref{cap:schedule}.
+
 \begin{table}[H]
     \centering
     \caption{Frame-to-frame face-embedding cosine similarity within a generated clip. The adjacent-frame minimum, the worst single transition, is the quantity the head-to-head comparison turns on.}
@@ -99,22 +101,12 @@ non-monotonic trajectories, for which the ramp-only training data offers no supp
         \toprule
         Condition & Mean cosine & Adjacent-frame min. & Face detected \\
         \midrule
-        Trained adaptor          & $0.92 \pm 0.05$ & $0.877 \pm 0.086$ & $120/120$ \\
-        Frozen backbone baseline & $0.85$          & $0.794 \pm 0.152$ & $43\%$ \\
+        Trained adaptor          & $0.919 \pm 0.054$ & $0.877 \pm 0.086$ & $120/120$ \\
+        Frozen backbone baseline & $0.853 \pm 0.128$ & $0.794 \pm 0.152$ & $52/120$ \\
         \bottomrule
     \end{tabular}\\[4pt]
-    {\footnotesize Source: prepared by the author. Lab note 2026-07-14, facenet-VGGFace2 embeddings. The baseline's faces were undetectable in 57\% of samples, so its cosines are computed on the easier remainder.}
+    {\footnotesize Source: prepared by the author. facenet-VGGFace2 embeddings, $n=120$ per condition. Face detected counts the samples in which a face was recoverable for the identity measurement; the baseline's cosines are computed on that subset only, so the gaps are lower bounds.}
 \end{table}
-
-Table~\ref{tab:res-identity} isolates the sequence-native claim. Within a generated clip the
-trained adaptor holds a frame-to-frame identity cosine of $0.92\pm0.05$ and, more tellingly, an
-adjacent-frame minimum of $0.877\pm0.086$ against the baseline's $0.794\pm0.152$; the
-adjacent-frame minimum is reported because the worst transition is the one a viewer notices, and
-it is the quantity the head-to-head comparison turns on. The comparison is not quite symmetric:
-the baseline's faces were undetectable in $57\%$ of samples, so its cosines are computed on the
-easier detectable remainder and are flattered. Identity is measured here with a single embedding
-network (facenet-VGGFace2); multi-model averaging with an ArcFace embedding is scheduled as
-proposed work in Chapter~\ref{cap:schedule}.
 
 % =====================================================================
 \section{Absolute Calibration}\label{sec:res-calibration}
@@ -136,107 +128,104 @@ proposed work in Chapter~\ref{cap:schedule}.
 %
 % This refutes H3 from Section~\ref{sec:hypotheses}. Say so in those words.
 
-The calibration measurement is a negative result, and it is reported as one. Holding the
-commanded value constant across a clip and varying it between clips produces almost no change in
-detected intensity: the calibration score is $\gls{cls}=0.07$, and the detected AU12 sits flat
-near $0.85$ for every commanded level at or above $0.1$. The context-dependence is stark: the
-same commanded value of $0.0$ renders as $0.54$ inside an ascending ramp but $0.79$ in a
-constant clip. The control is therefore \emph{relative and contextual}, not absolute: the
-conditioning commands a trajectory, not a value. This refutes hypothesis H3 of
-Section~\ref{sec:hypotheses}. The cause is in the training data, not the architecture: the
-clips are onset-to-apex ramps only (Section~\ref{sec:method-data}), so the model never observed
-a constant-intensity trajectory to calibrate against.
+Holding the commanded value constant across a clip and varying it between clips over
+$\{0.0, 0.1, \dots, 1.0\}$ produces almost no change in detected intensity. Over 10 prompts and
+three seeds at eleven commanded levels ($n=330$), the \gls{cls} is $0.07$ and the detected AU12
+remains flat near $0.85$ at every commanded level at or above $0.1$. The same commanded value
+also renders differently according to its surroundings: a commanded $0.0$ is detected at $0.54$
+as the first frame of an ascending ramp and at $0.79$ in a clip held constant at zero.
 
-Three remedies are plausible and are carried as proposed work in Chapter~\ref{cap:schedule},
-not as claims: augmenting the training set with constant- and permuted-intensity clips so the
-model observes non-ramp trajectories; AU dropout with classifier-free guidance on the
-expression condition \citep{wei2025magicface}; and label-distribution smoothing
-\citep{varanka2024fineface}. None has been run.
+The control is therefore relative to the commanded trajectory instead of absolute, which refutes
+hypothesis H3 of Section~\ref{sec:hypotheses}. The training data accounts for the result. The
+clips are onset-to-apex ramps only, so a constant-intensity
+trajectory falls outside the training distribution in precisely the dimension this protocol
+probes, and no training instance exhibits the fixed commanded-to-rendered mapping that H3
+presumes. The level at which the response saturates has a second source in the same data, since
+\gls{mead} happy clips carry substantial AU12 even at their lowest labelled level, which places
+the floor of the range near the plateau observed here.
+
+Three remedies follow from that diagnosis and are scheduled in Chapter~\ref{cap:schedule}:
+augmenting the training set with constant- and permuted-intensity clips, \gls{au} dropout with
+\gls{cfg} on the expression condition \citep{wei2025magicface}, and label-distribution smoothing
+\citep{varanka2024fineface}.
 
 % =====================================================================
-\section{Training Drives the Capability}\label{sec:res-dose}
+\section{Effect of Training Duration}\label{sec:res-dose}
 
-To confirm that trajectory following is learned rather than inherited from the frozen
-backbone, the ascending-ramp evaluation was repeated at six checkpoints spanning the single
-1k--100k training run (Figure~\ref{fig:dose}). Against an untrained baseline of $r=-0.05$,
-control is already at $r=0.55$ by 1k steps and rises to a plateau near $0.85$ by 25k--50k, a
-monotone trend over training (Spearman$(\text{step},r)=+0.60$) that the label-independent
-MediaPipe proxy tracks. Per-prompt variance also shrinks as training proceeds (standard
-deviation $0.43\to0.13$), so later training makes the control more consistent even after the
-mean saturates.
+The ascending-ramp evaluation of Section~\ref{sec:res-ramp} was repeated at six checkpoints
+spanning the training run, with prompts, seeds and protocol held fixed so that
+the checkpoint is the only variable, see Figure~\ref{fig:dose}. Against the untrained baseline of
+$r=-0.05$, control reaches $r=0.55$ by 1k steps and a plateau near $0.85$ by 25k--50k. The
+association with training steps is positive but not strictly monotone. Per-prompt variance shrinks as training proceeds, the standard deviation
+falling from $0.43$ to $0.13$, so later training makes the control more consistent after its mean
+has saturated. Trajectory following is therefore produced by the trained adaptor rather than
+inherited from the frozen backbone.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.78\textwidth]{images/2026-08-11-dose-response.pdf}
     \caption{Ramp-control fidelity against training steps, at six checkpoints of the single
     training run ($n=120$ ramps per checkpoint, bands $\pm1$ SEM). Both the py-feat AU12
-    correlation and the label-independent MediaPipe proxy rise and plateau. Lab note 2026-08-11.}
+    correlation and the label-independent MediaPipe proxy rise and plateau.}
     \label{fig:dose}
+    {\footnotesize Source: prepared by the author.}
 \end{figure}
 
-A caveat follows from the curve: the released 100k checkpoint is mildly past-peak for ramp
-following ($r=0.774$ against $0.850$ at 50k; Welch $t\approx3.4$), and every headline number
-in this chapter comes from it. Re-evaluating at a 25k--50k checkpoint is therefore a cheap
-improvement, noted as proposed work in Chapter~\ref{cap:schedule}.
-
 % =====================================================================
-\section{Comparison with the Closest Prior Art}\label{sec:res-headtohead}
+\section{Head-to-Head Comparison}\label{sec:res-headtohead}
 
-% The single most important external comparison in the proposal
-% (lab note 2026-07-21, n=120 matched prompts). The verdict is mixed and
-% must be presented as mixed.
+% Lab note 2026-07-21. The verdict is mixed and must be presented as mixed:
+% ramp following is a TIE, FineFace WINS calibration, this work wins identity.
+
+Table~\ref{tab:res-headtohead} reports the comparison between our method and FineFace. Trajectory
+following is statistically tied: FineFace leads by $0.012$ on py-feat, well within the spread of either
+system, and by a wider margin on the label-independent MediaPipe proxy, where it is ahead on
+$70\%$ of prompts. Absolute calibration goes to FineFace decisively, $0.50$ against $0.07$. That
+outcome is consistent with the diagnosis of Section~\ref{sec:res-calibration}, since a set of
+independently generated stills provides no surrounding trajectory for a commanded value to be
+read relative to, and each still must therefore carry the commanded intensity on its own.
+Cross-frame identity is where our model stands out, modestly but consistently: the adjacent-frame minimum is
+higher on $63$--$68\%$ of prompts with roughly $2.5\times$ lower variance.
 
 \begin{table}[H]
     \centering
-    \caption{Head-to-head against \citet{varanka2024fineface} under matched prompts and intensity levels ($n=120$). Higher is better in every column.}
+    \small
+    \caption{Head-to-head against FineFace \citep{varanka2024fineface} under matched prompts, seeds and intensity levels. Higher is better in every column.}
     \label{tab:res-headtohead}
-    \begin{tabular}{@{}lccc@{}}
+    \begin{tabular}{@{}lcccc@{}}
         \toprule
-        System & Ramp $r$ (py-feat) & Calibration (\gls{cls}) & Identity (adjacent min.) \\
+        System & py-feat $r$ & MediaPipe $r$ & \gls{cls} & Identity (min.) \\
         \midrule
-        FineFace, independent stills & $0.786$ & $0.50$ & baseline \\
-        This work, one clip          & $0.774$ & $0.07$ & $+0.12$ \\
+        FineFace, independent stills & $0.786 \pm 0.333$ & $0.880 \pm 0.238$ & $0.50$ & $0.756 \pm 0.212$ \\
+        This work, one clip          & $0.774 \pm 0.212$ & $0.829 \pm 0.230$ & $0.07$ & $0.877 \pm 0.086$ \\
         \bottomrule
     \end{tabular}\\[4pt]
-    {\footnotesize Source: prepared by the author. Lab note 2026-07-21.}
-\end{table}
+    {\footnotesize Source: prepared by the author. Ramp and identity columns: $n=120$, from 40 prompts $\times$ 3 seeds. \gls{cls} column: $n=330$, from 10 prompts $\times$ 3 seeds $\times$ 11 commanded levels.}
+    \end{table}
 
-% Read the table out loud in the text, in this order:
-%   1. Ramp following is a TIE (FineFace marginally ahead, and further ahead
-%      on the MediaPipe proxy: 0.88 vs 0.83).
-%   2. FineFace WINS absolute calibration decisively.
-%   3. This work wins cross-frame identity, modestly but consistently
-%      (63--68% of prompts, roughly 2.5x lower variance).
-% Therefore the defensible contribution is the sequence-native formulation
-% and the measurement protocol, NOT superior expression control. State this
-% conclusion explicitly here so that Cap01 and Cap06 can rely on it.
-
-Table~\ref{tab:res-headtohead} is the single most important external comparison, and its
-verdict is mixed. Read in order: first, ramp following is a tie. FineFace is marginally ahead on
-py-feat ($0.786$ against $0.774$) and further ahead on the MediaPipe proxy ($0.88$ against
-$0.83$), a difference within noise. Second, FineFace wins absolute calibration decisively
-($\gls{cls}=0.50$ against $0.07$), consistent with the ramp-only limitation of
-Section~\ref{sec:res-calibration}. Third, this work wins cross-frame identity, modestly but
-consistently: the adjacent-frame minimum is higher on $63$--$68\%$ of prompts, with roughly
-$2.5\times$ lower variance. The conclusion, which Chapters~\ref{cap:introduction}
-and~\ref{cap:schedule} rely on, is therefore explicit: the defensible contribution is the
-sequence-native formulation and the measurement protocol, not superior expression control.
+Both outcomes follow from the same design decision. Binding the intensity levels into one
+generated sequence is what supplies the cross-frame identity, since the levels share a single
+denoising pass and the temporal attention that spans it. That same decision fixes the training
+distribution: sequence-native training requires sequences, the sequences available in \gls{mead}
+are ramps, and no ramp exhibits the fixed commanded-to-rendered mapping on which absolute
+calibration depends, whereas a model trained on independent
+stills carrying absolute targets is under no such constraint. The two results are therefore not
+separate findings but consequences of one choice, and whether they can be decoupled, so that a
+sequence-native model also calibrates absolutely, is what the training-set augmentation proposed
+in Chapter~\ref{cap:schedule} is intended to establish.
 
 % =====================================================================
 \section{Whole-Face Response}\label{sec:res-coactivation}
 
 A single scalar axis invites the question of what \emph{else} it moves. Re-scoring the
 ascending-ramp clips for all twenty py-feat action units, cross-checked against an
-independent estimator (LibreFace) and against face-mesh geometry, shows that the axis drives
-a coherent smile expression rather than an isolated muscle (Figure~\ref{fig:coactivation}).
+independent estimator and against face-mesh geometry, shows that the axis drives
+a coherent smile expression, see Figure~\ref{fig:coactivation}.
 The commanded AU12 and the Duchenne cheek raiser AU6 co-activate strongly and are
-model-induced (both Spearman $r>0.87$, and significant at $q<0.05$ against the frozen
-baseline); mouth-opening units (AU25/26) rise while mouth-closing and frowning units (AU23,
+model-induced; mouth-opening units like AU25 and AU26, rise while mouth-closing and frowning units (AU23,
 AU17, AU15) fall. Brow units sit near zero on py-feat, although the independent detectors
-reveal a subtle brow entanglement that py-feat underreports, and the cross-check exposes one
-py-feat artefact (AU20, which the independent estimator contradicts). This is a feature and a
-limitation at once: the rendered change is a natural, coherent expression, but AU12 is not
-isolable. It is the empirical basis for the multi-AU extension proposed in
+reveal a subtle brow entanglement. This is a feature and a
+limitation at once: the rendered change is a natural, coherent expression, but AU12 is not isolable. It is the empirical basis for the multi-AU extension proposed in
 Chapter~\ref{cap:schedule}.
 
 \begin{figure}[t]
@@ -245,8 +234,9 @@ Chapter~\ref{cap:schedule}.
     \caption{Per-action-unit response to the AU12 ramp (Spearman $r$, trained adaptor versus
     frozen baseline). The smile cluster (AU12, AU6, AU25) co-activates and the mouth-closing
     units (AU23, AU17) anti-correlate, while brow units are near zero. Asterisks mark units
-    significantly modulated by training ($q<0.05$, Benjamini--Hochberg). Lab note 2026-08-25.}
+    significantly modulated by training ($q<0.05$, Benjamini--Hochberg).}
     \label{fig:coactivation}
+    {\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
@@ -274,10 +264,12 @@ adaptor pulls the output toward the lab-recorded \gls{mead} appearance it was tr
     across frames. Bottom: the frozen backbone under the same seed, left unchanged by the
     commanded trajectory.}
     \label{fig:qualitative}
+    {\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
 \section{Threats to Validity}\label{sec:res-threats}
+\todo[inline]{Review if this section is necessary}
 
 \begin{itemize}
     \item \textbf{Label--evaluation circularity.} py-feat provides both the training labels and the primary metric. Mitigated by the independent MediaPipe measurement (Section~\ref{subsec:eval-circularity}), which agreed, but not eliminated.

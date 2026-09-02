@@ -7,7 +7,7 @@
 % which is stale on three points (see 2026-08-11-provenance-rescue.md).
 
 This chapter specifies the proposed method. Section~\ref{sec:method-overview} states the
-task and gives a system overview; Section~\ref{sec:method-backbone} makes precise which
+task and gives a system overview; Section~\ref{sec:method-backbone} specifies which
 components are frozen and which are trained; Section~\ref{sec:method-conditioning}
 describes how a scalar expression intensity is encoded and injected into the backbone;
 Sections~\ref{sec:method-data} and~\ref{sec:method-training} cover the training data and
@@ -17,11 +17,12 @@ Section~\ref{sec:method-baselines} lists the baselines.
 % =====================================================================
 \section{Overview}\label{sec:method-overview}
 
-\noindent\textbf{Task.} Let a \emph{clip} denote a sequence of $F=5$ frames that share one
-identity and scene. Given a text prompt $p$ and a per-frame intensity trajectory
-$(s_1,\dots,s_F)$ with each $s_t \in [0,1]$, the method generates a single clip in which
-the detected intensity of a given action unit in frame $t$ tracks $s_t$; this work
-instantiates the axis with AU12.
+\noindent\textbf{Task.} Let a \emph{clip} denote the $F=5$ frames produced by a single
+generation pass from one text prompt. Given a prompt $p$ and a commanded intensity trajectory
+$s=(s_1,\dots,s_F)\in[0,1]^F$, the method generates a clip $x=(x_1,\dots,x_F)$ holding one
+identity and one scene, in which the detected intensity $\hat{s}_t$ of a given action unit in
+frame $x_t$ follows $s_t$ in the order-preserving sense of
+Section~\ref{sec:research-questions}; this work instantiates the axis with AU12.
 Because the proxy unit co-varies with its expression in the training data, the axis
 controls a graded expression rather than an isolated muscle action. FineFace \citep{varanka2024fineface} instead produces the $F$ intensity levels as \emph{independent} images that share only a random seed; binding identity and scene across the trajectory by construction is the distinguishing property of this formulation.
 
@@ -74,6 +75,7 @@ backbone through CLIP; the backbone output is decoded by the VAE. Trained compon
 orange (the expression encoder and the temporal-attention merge); the backbone, VAE and
 CLIP text encoder are frozen (blue).}
 \label{fig:system}
+{\footnotesize Source: prepared by the author.}
 \end{figure}
 
 % =====================================================================
@@ -108,7 +110,8 @@ Attention \texttt{merge} weights & \textbf{trained} & \phantom{0}18.96\,M \\
 \midrule
 \textbf{Total trainable} & & \textbf{218.22\,M} \\
 \bottomrule
-\end{tabular}
+\end{tabular}\\[4pt]
+{\footnotesize Source: prepared by the author.}
 \end{table}
 
 % =====================================================================

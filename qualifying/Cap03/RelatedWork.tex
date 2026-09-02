@@ -15,11 +15,15 @@
 % =====================================================================
 
 The systems reviewed in this chapter share one goal with the present work: producing a
-photorealistic face whose expression is directly specified. They differ in what
-they accept as that specification and in what they require as a starting point, and those two
-choices divide them into three task formulations. Expression \emph{transfer} copies the
-expression of a reference image onto a target identity, so the specification is itself an image. Expression \emph{editing} modifies a given source image, so the
-specification is a change relative to whatever expression that source already displays. Expression-conditioned \emph{generation} synthesises a face from text under a numeric action-unit condition, with no source image at all.
+photorealistic face whose expression is directly specified. Two questions separate them, namely
+whether a visual starting point is required and in what form the expression is specified, and the
+answers divide them into three task formulations. Expression \emph{transfer} requires two visual
+inputs, an exemplar carrying the expression and a reference carrying the identity, so the
+specification is itself an image. Expression \emph{editing} requires the photograph to be
+modified and takes a numeric specification, but one that is \emph{relative} to the expression the
+source already displays, which obliges the user to estimate that expression before commanding a
+change. Expression-conditioned \emph{generation} requires no starting image and takes an absolute
+numeric action-unit condition alongside a text prompt.
 
 The chapter is organised by these formulations, because what
 separates them is also what determines whether a system can meet the requirements set out in
@@ -82,7 +86,7 @@ the denoising UNet and adds a UNet-sized copy as an identity encoder -- an order
 more trainable parameters than the adaptor of Chapter~\ref{cap:method} -- trained on tens of
 thousands of same-identity pairs. It edits a given image instead of generating it from text, and
 each edited image is independent, with no temporal mechanism. Its own lab-versus-wild ablation,
-in which a model trained on lab-recorded faces fails to generalise to natural images.
+in which a model trained on lab-recorded faces, fails to generalise to natural images.
 
 \subsection{Intensity as a Text-Embedding Direction}\label{subsec:rw-pixelsmile}
 

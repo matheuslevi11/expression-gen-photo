@@ -28,16 +28,19 @@
 % =====================================================================
 \section{Motivation}\label{sec:motivation}
 
-Controllable synthesis of facial expressions has broad use, and in several of its applications
-what matters is not whether a face is smiling but \emph{how much}. Affective-computing and
-behavioural studies require stimuli whose expression intensity is varied in a controlled way, and
-that intensity is not an incidental parameter of the stimulus. Spontaneous expressions in real
-social interaction are frequently of low intensity, whereas conventional stimulus sets portray
-emotions only at their peak, a mismatch that motivated the construction of graded-intensity sets
-such as the \gls{adfes} Bath Intensity Variations \citep{wingenbach2016adfesbiv}. Its validation
-also shows that the axis is behaviourally consequential: recognition accuracy rises monotonically
-with intensity, from $56\%$ for low-intensity expressions to $68\%$ at intermediate and $75\%$ at
-high intensity. The level at which an expression is rendered therefore determines what a study
+Controllable synthesis of facial expressions has broad applications, many of which depend not simply
+on whether a face is smiling, but on \emph{the degree to which it is smiling}. Affective computing and
+behavioural studies, for example, require stimuli in which expression intensity can be systematically
+varied and controlled, making intensity an essential property of the stimulus rather than an incidental parameter.
+In real-world social interactions, spontaneous facial expressions are often relatively subtle,
+whereas conventional stimulus sets tend to depict emotions at their peak intensity. This discrepancy
+has motivated the development of graded-intensity datasets, of which \gls{adfesbiv}
+\citep{wingenbach2016adfesbiv} is representative: it re-renders the expressions of an existing
+peak-intensity set at low, intermediate and high intensity, so that intensity becomes a
+manipulable variable rather than a fixed property of the material. Its validation also shows that
+the axis is behaviourally consequential, since recognition accuracy rises monotonically with
+intensity, from $56\%$ for low-intensity expressions to $68\%$ at intermediate and $75\%$ at high
+intensity. The level at which an expression is rendered therefore determines what a study
 using it can measure.
 
 The same axis is a bottleneck for data. Deep \gls{fer} is limited above all by a shortage of
@@ -70,7 +73,7 @@ frames of a single coherent clip rather than across unrelated images.
 % that the contributions of Section~\ref{sec:contributions} and the evaluation
 % protocol of Chapter~\ref{cap:method} can be read against them.
 
-The problem is defined by what a solution would have to do. Three requirements follow from the
+Three requirements follow from the
 applications of Section~\ref{sec:motivation}, and a solution must satisfy them at the same time.
 
 \begin{itemize}
@@ -102,12 +105,18 @@ independent image.
 % Keep to two or three. Each must be answerable by an experiment in Cap05
 % or by the planned work in Cap06.
 
-\noindent\textbf{Task formulation.} Let a \emph{clip} denote a sequence of $F$ frames
-that share one identity and scene. Given a text prompt and a per-frame intensity
-trajectory $(s_1,\dots,s_F)$ with each $s_t \in [0,1]$, the objective is to generate a
-single clip in which the detected intensity of a given action unit in frame $t$ tracks
-$s_t$. This work instantiates the axis with AU12 (lip-corner puller), a proxy for smile
-intensity. 
+\noindent\textbf{Task formulation.} Let a \emph{clip} denote the $F=5$ frames produced by a
+single generation pass from one text prompt. Given a prompt $p$ and a commanded intensity
+trajectory $s=(s_1,\dots,s_F)\in[0,1]^F$, the objective is to generate a clip
+$x=(x_1,\dots,x_F)$ that holds one identity and one scene and in which the detected intensity of
+a given action unit in frame $t$ follows $s_t$. This work instantiates the axis with AU12
+(lip-corner puller), a proxy for smile intensity.
+
+Write $\hat{s}_t$ for the intensity an estimator detects in frame $x_t$. Control is
+\emph{order-preserving} when $s_i<s_j$ implies $\hat{s}_i<\hat{s}_j$ within a clip, and
+\emph{absolute} when a fixed increasing $g$, independent of the remaining entries of $s$,
+satisfies $\hat{s}_t=g(s_t)$. Absolute control implies order-preserving control; the converse
+does not hold. 
 
 Prior conditional-generation methods instead render each intensity level as an independent image. The three research questions below ask, in turn, whether this trajectory-following is achievable on a frozen \gls{t2v} backbone (RQ1), whether generating the trajectory jointly as one sequence benefits cross-level identity (RQ2), and whether the resulting control is absolute or relative to the commanded trajectory (RQ3). This formulation is restated and made precise
 in Chapter~\ref{cap:method}, Section~\ref{sec:method-overview}.
