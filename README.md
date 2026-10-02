@@ -85,6 +85,68 @@ Trainable parameters: the expression encoder (the `CameraCameraEncoder` module �
 
 Sanity-check GIFs of training batches land in `output/expression/<run>/sanity_check/`.
 
+### 4b. Training on SDumont2nd (SLURM, multi-node)
+
+`train_expression.py` already supports a `slurm` launcher (`init_dist(launcher="slurm", ...)`
+reads `SLURM_PROCID`/`SLURM_NTASKS`/`SLURM_NODELIST` and resolves `MASTER_ADDR`
+via `scontrol show hostname`) — no code changes are needed, only correct
+submission. This runs on LNCC's SDumont2nd cluster (BullSequana X3145H nodes,
+4x Nvidia H100 80GB each), scheduled by SLURM.
+
+This project's SLURM account is `crono`; the relevant partitions are
+`h100_dev` (20-minute ceiling, for smoke tests) and `petrobr-h100` (no time
+limit, for real runs). Verify with
+`sacctmgr list user $USER -s format=User,Account,Partition`.
+
+One-time setup on the cluster (run on a login node: it has internet access, compute nodes do not):
+
+```bash
+# 1. Build the conda env (conda is only available through the module system).
+module load anaconda3/2024.10
+conda env create -f environment.yaml
+
+# 2. Stage the data and backbones on shared scratch (no backup, no quota).
+#    MEAD_processed/, stable-diffusion-v1-5 with unet_merged/,
+#    RealEstate10K_LoRA.ckpt, v3_sd15_mm.ckpt  ->  /petrobr/crono/...
+#    The backbones can be fetched directly from the HF repo
+#    pandaphd/generative_photography (skip safety_checker/ and the
+#    checkpoint-*.ckpt camera adaptors); MEAD_processed/ must be rsync'd in.
+
+# 3. Create the SLURM log directory (sbatch will not create it). Run this and
+#    every sbatch below from the repo root: log paths in the .srm are relative.
+mkdir -p slurm_logs
+```
+
+Never run training directly on a login node: it has a 30-minute execution
+limit and no GPU.
+
+Copy `configs/train_genphoto/expression_sdumont2nd.yaml` to a location under
+`/petrobr/crono/...` (outside this git repo) and fill in the `/path/to/...`
+placeholders with the real staged paths. Do **not** commit the filled-in
+version — configs with real local paths stay out of git (see `CLAUDE.md`).
+
+Validation sequence, in order:
+
+```bash
+# 1. Single-node smoke test (h100_dev): env, /petrobr paths, 2-GPU step
+#    (h100_dev's QOS caps jobs at 2 GPUs / 48 CPUs per node).
+sbatch --nodes=1 scripts/slurm/smoke_expression_sdumont2nd.srm
+
+# 2. Two-node smoke test: confirms cross-node rendezvous/NCCL.
+sbatch --nodes=2 scripts/slurm/smoke_expression_sdumont2nd.srm
+
+# 3. Production run (petrobr-h100), once both smoke tests pass cleanly.
+TRAIN_CONFIG=/petrobr/crono/.../expression_sdumont2nd.local.yaml \
+  sbatch --nodes=<N> --time=<HH:MM:SS> scripts/slurm/train_expression_sdumont2nd.srm
+```
+
+Use `sbatch --test-only <script>` to validate a submission without queueing it.
+
+Note the `CUDA_VISIBLE_DEVICES` guidance above does **not** apply on this
+path: SLURM's `--gpus-per-node` already isolates GPUs per task/job. Manually
+exporting `CUDA_VISIBLE_DEVICES` in the `.srm` scripts would be redundant at
+best and conflict with SLURM's own GPU isolation at worst.
+
 ## 5. Inference
 
 After training, set `expression_adaptor_ckpt` in `configs/inference_genphoto/expression.yaml` to a saved checkpoint, then:

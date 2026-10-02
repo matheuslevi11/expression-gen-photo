@@ -25,6 +25,12 @@ Thumbs.db
 # Logs
 *.log
 
+# SLURM job logs (SDumont2nd)
+slurm-*.out
+scripts/slurm/*.out
+scripts/slurm/*.err
+slurm_logs/
+
 # Temporary files
 *.tmp
 *.swp

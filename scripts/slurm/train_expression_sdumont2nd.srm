@@ -1,0 +1,71 @@
+#!/bin/bash
+# Multi-node training launcher for the LNCC SDumont2nd cluster (BullSequana
+# X3145H, 4x Nvidia H100 SXM 80GB per node). train_expression.py's init_dist()
+# already implements the "slurm" launcher (reads SLURM_PROCID/NTASKS/NODELIST,
+# resolves MASTER_ADDR via `scontrol show hostname`) — no code changes needed,
+# only correct submission.
+#
+# Usage:
+#   sbatch scripts/slurm/train_expression_sdumont2nd.srm            # 2 nodes, 4h (defaults below)
+#   sbatch --nodes=4 --time=12:00:00 scripts/slurm/train_expression_sdumont2nd.srm
+#   TRAIN_CONFIG=/petrobr/crono/.../expression_sdumont2nd.local.yaml sbatch ...
+#
+# Do NOT run the underlying `python train_expression.py ...` command directly on
+# a login node: login nodes have a 30-minute execution limit and no GPUs.
+#
+# Run the smoke test (scripts/slurm/smoke_expression_sdumont2nd.srm) with
+# --nodes=1 and --nodes=2 first and confirm it passes before submitting this
+# script for a real run (see docs/status.md / README.md validation sequence).
+
+#SBATCH --job-name=expr-gen-photo
+#SBATCH --account=crono
+#SBATCH --partition=petrobr-h100
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=4
+#SBATCH --gpus-per-node=4
+#SBATCH --cpus-per-task=24
+#SBATCH --time=04:00:00
+#SBATCH --output=slurm_logs/%x-%j.out
+#SBATCH --error=slurm_logs/%x-%j.err
+# ^ create slurm_logs/ ahead of time (mkdir -p); sbatch will not create it and
+#   the job fails at launch if the directory is missing.
+
+set -euo pipefail
+
+module load arch_gpu
+module load anaconda3/2024.10
+
+# conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
+set +u
+source "$(conda info --base)/etc/profile.d/conda.sh"
+# sbatch exports the submitting shell's env: if genphoto was active there, the
+# module load above put base conda first on PATH and a plain activate is a no-op.
+while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
+conda activate genphoto
+set -u
+[ "$(command -v python)" = "${CONDA_PREFIX}/bin/python" ] || { echo "wrong python: $(command -v python)" >&2; exit 1; }
+
+cd "${SLURM_SUBMIT_DIR}"
+
+export MASTER_PORT=29500
+export PORT=${MASTER_PORT}   # init_dist() reads the "PORT" env var, not MASTER_PORT directly
+export NCCL_DEBUG=INFO
+export PYTHONUNBUFFERED=1
+# NCCL_SOCKET_IFNAME is deliberately left unset so NCCL autodetects the fabric
+# (IB verbs via mlx5_0; the ethernet-side name is ibp65s0, not the ib0 that
+# generic guides assume). Set it explicitly only if NCCL_DEBUG output shows the
+# bootstrap picking the wrong interface.
+
+# Deliberately NOT setting CUDA_VISIBLE_DEVICES here: unlike the single-GPU
+# workstation flow documented in README.md/CLAUDE.md, SLURM's --gpus-per-node
+# already isolates GPUs per job on this cluster (ConstrainDevices=yes).
+
+CONFIG=${TRAIN_CONFIG:-configs/train_genphoto/expression_sdumont2nd.yaml}
+
+# --ntasks-per-node=4 = one process per GPU. init_dist() computes
+# local_rank = SLURM_PROCID % torch.cuda.device_count(), which lands on a
+# distinct GPU per task under the default block task distribution.
+srun --export=ALL python train_expression.py \
+    --config "${CONFIG}" \
+    --launcher slurm \
+    --port ${MASTER_PORT}

@@ -1,0 +1,63 @@
+#!/bin/bash
+# Multi-node SLURM smoke test for the LNCC SDumont2nd cluster — validates the
+# distributed code path (rank/world-size wiring, cross-node rendezvous), not
+# the model graph (already covered by configs/train_genphoto/expression_smoke.yaml
+# run locally). Uses configs/train_genphoto/expression_sdumont2nd_smoke.yaml
+# (6 steps) by default.
+#
+# Required validation sequence before any production run:
+#   sbatch --nodes=1 scripts/slurm/smoke_expression_sdumont2nd.srm
+#     -> confirms the env, the /petrobr paths and a single-node 2-GPU step.
+#   sbatch --nodes=2 scripts/slurm/smoke_expression_sdumont2nd.srm
+#     -> confirms MASTER_ADDR resolution + the cross-node NCCL handshake, and
+#        that DistributedSampler shards across all 4 ranks.
+#
+# Only after both pass cleanly, submit scripts/slurm/train_expression_sdumont2nd.srm
+# for a real run. The h100_dev partition caps jobs at 20 minutes.
+
+#SBATCH --job-name=expr-smoke
+#SBATCH --account=crono
+#SBATCH --partition=h100_dev
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=2
+#SBATCH --gpus-per-node=2
+# ^ h100_dev's QOS (sh_h100_dev) caps each node at 48 CPUs / 2 GPUs / 500G; a
+#   full-node request pends forever with Reason=QOSMaxCpuPerNode (sbatch
+#   --test-only does not check QOS). Production on petrobr-h100 has no such cap.
+#SBATCH --cpus-per-task=24
+#SBATCH --time=00:15:00
+# ^ short by design (6 training steps); the partition's ceiling is 00:20:00, so
+#   if the first cold read of the SD1.5 snapshot from /petrobr is too slow, run
+#   the smoke test on petrobr-h100 instead of raising this past 20 minutes.
+#SBATCH --output=slurm_logs/%x-%j.out
+#SBATCH --error=slurm_logs/%x-%j.err
+# ^ create slurm_logs/ ahead of time (mkdir -p); sbatch will not create it.
+
+set -euo pipefail
+
+module load arch_gpu
+module load anaconda3/2024.10
+
+# conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
+set +u
+source "$(conda info --base)/etc/profile.d/conda.sh"
+# sbatch exports the submitting shell's env: if genphoto was active there, the
+# module load above put base conda first on PATH and a plain activate is a no-op.
+while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
+conda activate genphoto
+set -u
+[ "$(command -v python)" = "${CONDA_PREFIX}/bin/python" ] || { echo "wrong python: $(command -v python)" >&2; exit 1; }
+
+cd "${SLURM_SUBMIT_DIR}"
+
+export MASTER_PORT=29500
+export PORT=${MASTER_PORT}
+export NCCL_DEBUG=INFO
+export PYTHONUNBUFFERED=1
+
+CONFIG=${TRAIN_CONFIG:-configs/train_genphoto/expression_sdumont2nd_smoke.yaml}
+
+srun --export=ALL python train_expression.py \
+    --config "${CONFIG}" \
+    --launcher slurm \
+    --port ${MASTER_PORT}

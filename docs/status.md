@@ -2,7 +2,7 @@
 
 Living document: current state of the Generative Photography → **Generative Expressions** fork. Edited destructively — checked items get checked, wrong claims get deleted. History and full experiment write-ups live in [`experiments/`](experiments/) (append-only, date-stamped). Design rationale: [`plan.md`](plan.md). Usage commands: root [`README.md`](../README.md). Doc conventions: root [`CLAUDE.md`](../CLAUDE.md).
 
-*Last updated: September 24, 2026.*
+*Last updated: October 1, 2026.*
 
 ---
 
@@ -53,6 +53,7 @@ Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21
 | 2026-09-24 | [prompt-decoupled operator](experiments/2026-09-24-prompt-decoupled-operator.md) | Design note (no run), **advisor proposal** post-qualification: take the prompt out of the core loop and isolate the **S-operator** — face embedding (from a prompt *or any source*) + per-frame S → temporal embeddings → VAE-decode ("give a neutral face, I make it smile 0.2/0.8"). Adds editing/animation the current model lacks. Instantiations: (A) pure latent operator (cheap, risk = VAE realism of large smiles), (B) reusable face-embedding conditioning (IP-Adapter-style, practical), (C) framing-only. **Requires absolute calibration** as a prerequisite. Two cheap no-retrain probes proposed first. |
 | 2026-09-24 | [probe 1: latent smile direction](experiments/2026-09-24-probe-latent-smile.md) | Feasibility probe for path A (no retrain): a global **linear** SD-VAE smile direction pushes detected AU12 0.43→0.81 across α, but is **entangled with a global darkening/skin-tone shift** — reaching a strong smile (AU12≳0.7) forces identity to collapse (0.66→0.37); the "brightness shortcut" risk. VAE roundtrip faithful (ceiling 0.87). **Linear latent editing not viable**; a learned disentangling operator would be needed. Favors **path B** (diffusion editing) → run probe 2 next. |
 | 2026-09-24 | [probe 2: diffusion editing (SDEdit)](experiments/2026-09-24-probe-diffusion-edit.md) | Editing probe for path B (no retrain), 6 inputs × 4 strengths: the trained S-operator **animates a supplied in-domain neutral face** into a graded, identity-preserving smile with no darkening — but only in a **narrow strength band** (S≈0.7: ramp r=0.85, id→input 0.68; by S≥0.9 identity collapses to 0.24 = pure regeneration) and it does **not transfer to out-of-domain faces** zero-shot (they get regenerated, not edited). **Path B confirmed as the direction, but zero-shot SDEdit is not the deliverable** — the production operator needs trained reusable-face-embedding conditioning + inversion + absolute calibration. |
+| 2026-10-01 | [SDumont2nd smoke](experiments/2026-10-01-sdumont2nd-smoke.md) | First cluster runs: 6-step smoke passes on 1×2 and 2×2 H100 (cross-node NCCL over IB/GPUDirect). Fixed 3 launch bugs: `h100_dev` QOS caps 2 GPU/node, `set -u` vs conda hooks, inherited activated env → base python. |
 
 ---
 
@@ -126,6 +127,15 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nproc_per_node=1 \
 
 `CUDA_VISIBLE_DEVICES` is required: `torchrun` sets `LOCAL_RANK=0` and the script does `torch.cuda.set_device(local_rank)` → physical GPU 0 unless remapped.
 
+### Training (multi-node, SDumont2nd)
+
+```bash
+sbatch --nodes=1 scripts/slurm/smoke_expression_sdumont2nd.srm       # smoke (h100_dev)
+sbatch --nodes=<N> scripts/slurm/train_expression_sdumont2nd.srm     # real run (petrobr-h100)
+```
+
+Account `crono`; uses the existing `--launcher slurm` path, no code changes. Staged (2026-10-01): `genphoto` env (verified on H100), backbones under `/petrobr/crono/matheus.aidano/backbones/` (sha256-checked), filled configs in `/petrobr/crono/matheus.aidano/configs_local/`, `MEAD_processed/` (all 100,896 frames present and decodable). 1- and 2-node smoke pass ([2026-10-01](experiments/2026-10-01-sdumont2nd-smoke.md)); `h100_dev` is capped at 2 GPUs/node by QOS. See root [`README.md`](../README.md#4b-training-on-sdumont2nd-slurm-multi-node).
+
 ### Inference + metrics
 
 ```bash
@@ -173,6 +183,9 @@ configs/eval_prompts.txt                          # 40-prompt bank for batch eva
 configs/train_genphoto/expression.yaml            # full train (placeholders)
 configs/train_genphoto/expression_smoke.yaml      # verified 5-step smoke
 configs/train_genphoto/expression_validation.yaml # verified production-path validation
+configs/train_genphoto/expression_sdumont2nd.yaml       # full train, SDumont2nd cluster (placeholders)
+configs/train_genphoto/expression_sdumont2nd_smoke.yaml # 6-step multi-node smoke, SDumont2nd
+scripts/slurm/                                    # sbatch launchers for SDumont2nd (SLURM)
 configs/inference_genphoto/expression.yaml        # trained-adaptor inference
 configs/inference_genphoto/expression_baseline.yaml # fair frozen-backbone baseline
 comp_metrics/expression_au_accuracy.py
