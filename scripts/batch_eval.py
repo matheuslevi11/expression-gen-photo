@@ -344,6 +344,15 @@ def cmd_summarize(args):
             s["curve_au12_by_level"] = {
                 str(lvl): _stats(vals) for lvl, vals in sorted(curve.items())}
             s["cls_pearson_pooled"] = pearson(pooled_c, pooled_d)
+            # Same pooled CLS on the label-independent MediaPipe proxy (not in AU12 units,
+            # but Pearson is scale-free) — guards against py-feat label/eval circularity.
+            mp_c, mp_d = [], []
+            for r in rows:
+                if r.get("mp_smile") is not None and r.get("level") is not None:
+                    mp_c += [r["level"]] * len(r["mp_smile"])
+                    mp_d += r["mp_smile"]
+            if mp_c:
+                s["cls_mp_pearson_pooled"] = pearson(mp_c, mp_d)
         summary[exp] = s
 
     out_path = Path(args.out or Path(args.results).parent / "summary.json")
@@ -358,6 +367,8 @@ def cmd_summarize(args):
                 print(f"   {key:18s} {s[key]['mean']:.4f}{std}  (n={s[key]['n']})")
         if "cls_pearson_pooled" in s:
             print(f"   {'CLS (pooled)':18s} {s['cls_pearson_pooled']:.4f}")
+        if "cls_mp_pearson_pooled" in s:
+            print(f"   {'CLS MediaPipe':18s} {s['cls_mp_pearson_pooled']:.4f}")
         for lvl, st in s.get("curve_au12_by_level", {}).items():
             print(f"     level {lvl:>5}: detected AU12 {st['mean']:.3f} ± {st['std'] or 0:.3f}")
 

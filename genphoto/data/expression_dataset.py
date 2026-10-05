@@ -16,7 +16,7 @@ import json
 import math
 import os
 import random
-from typing import List, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -133,6 +133,72 @@ def _select_intensity_progression(
     return [int(order[p]) for p in picks]
 
 
+SEQUENCE_MODES = ("ramp", "constant", "permuted")
+
+
+def _normalize_mode_probs(mode_probs: Mapping[str, float]) -> Dict[str, float]:
+    probs = {str(k): float(v) for k, v in dict(mode_probs).items()}
+    unknown = set(probs) - set(SEQUENCE_MODES)
+    if unknown:
+        raise ValueError(f"Unknown sequence modes {sorted(unknown)}; expected a subset of {SEQUENCE_MODES}.")
+    if any(v < 0 for v in probs.values()) or sum(probs.values()) <= 0:
+        raise ValueError(f"sequence_mode_probs must be non-negative with a positive sum, got {probs}.")
+    total = sum(probs.values())
+    return {k: v / total for k, v in probs.items() if v > 0}
+
+
+def _build_constant_pool(
+    clip_frame_intensities: Sequence[Sequence[float]],
+    sample_n_frames: int,
+    levels: Sequence[float],
+    tolerance: float,
+) -> List[Tuple[float, List[Tuple[int, List[int]]]]]:
+    """For each target level, list every (clip, frames within ``tolerance``) able to fill a clip.
+
+    Levels no clip can support are dropped, so sampling a level uniformly from the pool rebalances
+    toward the rare low-AU12 end instead of mirroring MEAD-happy's high-intensity skew.
+    """
+    pool = []
+    for level in levels:
+        candidates = []
+        for clip_idx, intensities in enumerate(clip_frame_intensities):
+            near = [i for i, v in enumerate(intensities) if abs(float(v) - level) <= tolerance]
+            if len(near) >= sample_n_frames:
+                candidates.append((clip_idx, near))
+        if candidates:
+            pool.append((float(level), candidates))
+    return pool
+
+
+def _select_constant_frames(
+    pool: Sequence[Tuple[float, Sequence[Tuple[int, Sequence[int]]]]],
+    sample_n_frames: int,
+    rng=random,
+) -> Tuple[int, List[int]]:
+    """Uniform level → uniform supporting clip → ``sample_n_frames`` of its near-level frames.
+
+    Frames keep their temporal order so the motion prior sees natural video dynamics.
+    """
+    _, candidates = rng.choice(pool)
+    clip_idx, near = rng.choice(candidates)
+    return clip_idx, sorted(rng.sample(list(near), sample_n_frames))
+
+
+def _select_permuted_progression(
+    frame_intensities: Sequence[float],
+    sample_n_frames: int,
+    rng=random,
+) -> List[int]:
+    """The ramp's frames in a random non-identity order (a non-monotonic intensity trajectory)."""
+    ramp = _select_intensity_progression(frame_intensities, sample_n_frames)
+    if sample_n_frames < 2:
+        return ramp
+    perm = list(range(sample_n_frames))
+    while perm == sorted(perm):
+        rng.shuffle(perm)
+    return [ramp[p] for p in perm]
+
+
 class ExpressionMEAD(Dataset):
     """Same-identity, varying-expression-intensity dataset built from preprocessed MEAD clips.
 
@@ -155,6 +221,12 @@ class ExpressionMEAD(Dataset):
     validation with an explicit ``intensity_list``, pixel frames still come from a monotonic
     AU12 ramp in the clip (so reference videos are visually distinct), while the scalar targets
     passed to the encoder use ``intensity_list`` (so evaluation uses fixed targets across runs).
+
+    ``sequence_mode_probs`` (training only, e.g. ``{ramp: 0.5, constant: 0.3, permuted: 0.2}``)
+    mixes in *constant* sequences (frames within ``constant_level_tolerance`` of a level drawn
+    uniformly from ``constant_levels`` evenly spaced levels in [0, 1], from any clip supporting it)
+    and *permuted* ramps. Conditioning is always the shown frames' own AU12 labels. ``None``
+    keeps the ramp-only behaviour exactly.
     """
 
     def __init__(
@@ -167,6 +239,9 @@ class ExpressionMEAD(Dataset):
         is_Train: bool = True,
         prompt_template: str = "<smile intensity: {value:.3f}>",
         emotion_filter: str = "happy",
+        sequence_mode_probs: Optional[Mapping[str, float]] = None,
+        constant_levels: int = 11,
+        constant_level_tolerance: float = 0.1,
     ) -> None:
         self.root_path = root_path
         self.sample_n_frames = sample_n_frames
@@ -187,6 +262,23 @@ class ExpressionMEAD(Dataset):
             )
         self.length = len(self.dataset)
 
+        self.sequence_mode_probs = None
+        self.constant_pool = []
+        if sequence_mode_probs is not None and is_Train:
+            self.sequence_mode_probs = _normalize_mode_probs(sequence_mode_probs)
+            if "constant" in self.sequence_mode_probs:
+                self.constant_pool = _build_constant_pool(
+                    [[self._frame_intensity(f) for f in c["frames"]] for c in self.dataset],
+                    sample_n_frames,
+                    np.linspace(0.0, 1.0, constant_levels).tolist(),
+                    constant_level_tolerance,
+                )
+                if not self.constant_pool:
+                    raise ValueError(
+                        f"No clip has {sample_n_frames} frames within ±{constant_level_tolerance} "
+                        f"of any of {constant_levels} levels; cannot build constant sequences."
+                    )
+
         self.pixel_transforms = [
             transforms.Resize(sample_size),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
@@ -201,15 +293,35 @@ class ExpressionMEAD(Dataset):
     def __len__(self) -> int:
         return self.length
 
+    @staticmethod
+    def _frame_intensity(frame_meta) -> float:
+        return float(frame_meta.get("au12", frame_meta.get("intensity", 0.0)))
+
+    def _sample_sequence_mode(self) -> str:
+        modes = list(self.sequence_mode_probs)
+        return random.choices(modes, weights=[self.sequence_mode_probs[m] for m in modes])[0]
+
     def _load_clip(self, idx: int):
+        mode = "ramp"
+        if self.is_Train and self.sequence_mode_probs is not None:
+            mode = self._sample_sequence_mode()
+        constant_indices = None
+        if mode == "constant":
+            idx, constant_indices = _select_constant_frames(self.constant_pool, self.sample_n_frames)
+
         clip = self.dataset[idx]
         frames_meta = clip["frames"]
         frame_paths = [f["path"] for f in frames_meta]
-        frame_intensities = [float(f.get("au12", f.get("intensity", 0.0))) for f in frames_meta]
+        frame_intensities = [self._frame_intensity(f) for f in frames_meta]
         caption = clip.get("caption", "A portrait photograph of a person.")
 
         if self.is_Train:
-            chosen_indices = _select_intensity_progression(frame_intensities, self.sample_n_frames)
+            if mode == "constant":
+                chosen_indices = constant_indices
+            elif mode == "permuted":
+                chosen_indices = _select_permuted_progression(frame_intensities, self.sample_n_frames)
+            else:
+                chosen_indices = _select_intensity_progression(frame_intensities, self.sample_n_frames)
             chosen_intensities = [frame_intensities[i] for i in chosen_indices]
         else:
             target_list = clip.get("intensity_list")

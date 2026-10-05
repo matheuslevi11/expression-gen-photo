@@ -54,6 +54,7 @@ Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21
 | 2026-09-24 | [probe 1: latent smile direction](experiments/2026-09-24-probe-latent-smile.md) | Feasibility probe for path A (no retrain): a global **linear** SD-VAE smile direction pushes detected AU12 0.43→0.81 across α, but is **entangled with a global darkening/skin-tone shift** — reaching a strong smile (AU12≳0.7) forces identity to collapse (0.66→0.37); the "brightness shortcut" risk. VAE roundtrip faithful (ceiling 0.87). **Linear latent editing not viable**; a learned disentangling operator would be needed. Favors **path B** (diffusion editing) → run probe 2 next. |
 | 2026-09-24 | [probe 2: diffusion editing (SDEdit)](experiments/2026-09-24-probe-diffusion-edit.md) | Editing probe for path B (no retrain), 6 inputs × 4 strengths: the trained S-operator **animates a supplied in-domain neutral face** into a graded, identity-preserving smile with no darkening — but only in a **narrow strength band** (S≈0.7: ramp r=0.85, id→input 0.68; by S≥0.9 identity collapses to 0.24 = pure regeneration) and it does **not transfer to out-of-domain faces** zero-shot (they get regenerated, not edited). **Path B confirmed as the direction, but zero-shot SDEdit is not the deliverable** — the production operator needs trained reusable-face-embedding conditioning + inversion + absolute calibration. |
 | 2026-10-01 | [SDumont2nd smoke](experiments/2026-10-01-sdumont2nd-smoke.md) | First cluster runs: 6-step smoke passes on 1×2 and 2×2 H100 (cross-node NCCL over IB/GPUDirect). Fixed 3 launch bugs: `h100_dev` QOS caps 2 GPU/node, `set -u` vs conda hooks, inherited activated env → base python. |
+| 2026-10-02 | [calibration augmentation](experiments/2026-10-02-calibration-augmentation.md) | Train-time ramp/constant/permuted mix (level drawn *uniformly*) vs fresh ramp-only control, 25k each on H100: **CLS 0.03 → 0.16 on both py-feat and MediaPipe** (Δ CIs exclude 0), ramp r and identity unchanged; **permuted r 0.16 → 0.49**. Partial: response is flat for c ≤ 0.6 (data-starved low end) and constant lists zero the CCL channels (train/eval mismatch). ⚠️ This cluster control scores ramp r 0.65 vs 0.85 for the original 25k — unresolved; don't mix cluster and workstation numbers. |
 
 ---
 
@@ -100,7 +101,7 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 ## Known limitations (affect result quality, not correctness)
 
 - **MEAD happy clips** often have high AU12 even at lower labeled intensity levels; the dataset uses sorted-frame ramps and, for validation, decouples fixed `intensity_list` targets from which pixels are shown.
-- **No absolute intensity calibration** — commanded values are rendered *relative to the clip's trajectory*, not as absolute AU12 targets (constant-list CLS = 0.07, flat ~0.85 plateau). FineFace (prior art) reaches CLS 0.50 on the same protocol, so this is a genuine deficit vs the field, not just an unmeasured axis. Consequence of ramp-only MEAD training (**not** undertraining — the 2026-08-11 dose–response shows ramp control saturates by 25k and extended training to 100k did not improve it); fix candidates: constant/permuted-list training augmentation, AU dropout + expression-CFG, label distribution smoothing (see 2026-07-14, 2026-07-21 notes).
+- **No absolute intensity calibration** — commanded values are rendered *relative to the clip's trajectory*, not as absolute AU12 targets (constant-list CLS = 0.07, flat ~0.85 plateau). FineFace (prior art) reaches CLS 0.50 on the same protocol, so this is a genuine deficit vs the field, not just an unmeasured axis. Consequence of ramp-only MEAD training (**not** undertraining — the 2026-08-11 dose–response shows ramp control saturates by 25k and extended training to 100k did not improve it); constant/permuted-list augmentation with level rebalancing (2026-10-02) lifts CLS only to 0.16 — the low end (c ≤ 0.6) stays flat; remaining levers: MEAD neutral clips for low-AU12 support, exact-c constant conditioning (CCL is zero for constant lists), AU dropout + expression-CFG, label smoothing.
 - **Ramp-following is on par with, not better than, prior art** — matched-prompt AU12 r ties FineFace (0.77 vs 0.79). The contribution is the sequence-native temporal formulation + modestly better cross-frame identity, not superior control.
 - **Male baseline-smile bias (data-specific)** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female). FineFace shows the *opposite* skew (male 0.82 > female 0.77), localizing the bias to the MEAD-happy training distribution rather than AU-conditioned generation generally. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required.
 - **Option A embedding only** — scalar broadcast + CCL; no landmark flow or multi-AU control yet.
@@ -174,7 +175,8 @@ python scripts/batch_eval.py summarize \
 ```
 train_expression.py              # training entry
 inference_expression.py          # inference entry (--seed for reproducible ablations)
-genphoto/data/expression_dataset.py
+genphoto/data/expression_dataset.py   # sequence_mode_probs: ramp/constant/permuted train-time mix
+tests/test_expression_sampling.py    # sampling unit tests (python tests/test_expression_sampling.py)
 scripts/preprocess_mead.py
 scripts/_validate_dataset_and_model.py            # static validator
 scripts/export_results.sh                         # stage results tarball for scp/rsync pull
@@ -185,7 +187,8 @@ configs/train_genphoto/expression_smoke.yaml      # verified 5-step smoke
 configs/train_genphoto/expression_validation.yaml # verified production-path validation
 configs/train_genphoto/expression_sdumont2nd.yaml       # full train, SDumont2nd cluster (placeholders)
 configs/train_genphoto/expression_sdumont2nd_smoke.yaml # 6-step multi-node smoke, SDumont2nd
-scripts/slurm/                                    # sbatch launchers for SDumont2nd (SLURM)
+configs/train_genphoto/expression_calib_{aug,ctrl}.yaml # 2026-10-02 calibration arms (placeholders)
+scripts/slurm/                                    # sbatch launchers for SDumont2nd (train, smoke, batch_eval)
 configs/inference_genphoto/expression.yaml        # trained-adaptor inference
 configs/inference_genphoto/expression_baseline.yaml # fair frozen-backbone baseline
 comp_metrics/expression_au_accuracy.py

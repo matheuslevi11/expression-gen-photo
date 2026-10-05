@@ -1,0 +1,86 @@
+#!/bin/bash
+# Batch evaluation (scripts/batch_eval.py) on one SDumont2nd H100 node: each
+# experiment runs generate -> score -> summarize on its own GPU, in parallel.
+# Protocol sizes follow docs/experiments/2026-07-14-tier12-batch-eval.md:
+#   calibration  10 prompts x 3 seeds x 11 constant levels   (330 samples)
+#   scaled       40 prompts x 3 seeds x ascending ramp       (120)
+#   permuted     10 prompts x 3 seeds x 3 fixed lists        (90)
+#   extrapolation 10 prompts x 3 seeds x 4 out-of-range levels (120)
+#
+# Usage (from the repo root; INFER_CONFIG is a filled-in inference YAML outside git):
+#   INFER_CONFIG=/petrobr/crono/.../calib_aug_25k.local.yaml \
+#   OUT_DIR=inference_output/batch_eval/calib_aug_25k \
+#     sbatch scripts/slurm/batch_eval_sdumont2nd.srm
+#   EXPERIMENTS="calibration" ... sbatch --gpus-per-node=1 ...   # subset
+#   LIMIT=4 EXPERIMENTS="calibration scaled" ... sbatch --partition=h100_dev \
+#     --gpus-per-node=2 --cpus-per-task=48 --time=00:15:00 ...   # quick smoke
+#
+# Every stage is resumable, so resubmitting the same command continues where a
+# job stopped. Detector weights (py-feat, facenet, MediaPipe) must already be
+# cached under ~/.cache — compute nodes have no internet; instantiate the
+# scorers once on a login node first.
+
+#SBATCH --job-name=batch-eval
+#SBATCH --account=crono
+#SBATCH --partition=petrobr-h100
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-node=3
+#SBATCH --cpus-per-task=72
+#SBATCH --time=03:00:00
+#SBATCH --output=slurm_logs/%x-%j.out
+#SBATCH --error=slurm_logs/%x-%j.err
+
+set -euo pipefail
+
+module load arch_gpu
+module load anaconda3/2024.10
+
+# conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
+set +u
+source "$(conda info --base)/etc/profile.d/conda.sh"
+# sbatch exports the submitting shell's env: if genphoto was active there, the
+# module load above put base conda first on PATH and a plain activate is a no-op.
+while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
+conda activate genphoto
+set -u
+[ "$(command -v python)" = "${CONDA_PREFIX}/bin/python" ] || { echo "wrong python: $(command -v python)" >&2; exit 1; }
+
+cd "${SLURM_SUBMIT_DIR}"
+export PYTHONUNBUFFERED=1
+
+: "${INFER_CONFIG:?set INFER_CONFIG to a filled-in inference YAML}"
+: "${OUT_DIR:?set OUT_DIR, e.g. inference_output/batch_eval/<variant>}"
+EXPERIMENTS=${EXPERIMENTS:-"calibration scaled permuted"}
+SEEDS=${SEEDS:-42,43,44}
+LIMIT=${LIMIT:+--limit ${LIMIT}}   # optional cap on jobs per experiment (smoke tests)
+
+read -r -a EXPS <<< "${EXPERIMENTS}"
+NGPU=$(python -c "import torch; print(torch.cuda.device_count())")
+[ "${#EXPS[@]}" -le "${NGPU}" ] || { echo "${#EXPS[@]} experiments but only ${NGPU} GPUs" >&2; exit 1; }
+export OMP_NUM_THREADS=$(( SLURM_CPUS_PER_TASK / ${#EXPS[@]} ))
+
+run_experiment() {
+    local exp=$1 gpu=$2 dir="${OUT_DIR}/$1" n
+    case "${exp}" in
+        scaled) n="" ;;
+        calibration|permuted|extrapolation) n="--num-prompts 10" ;;
+        *) echo "unknown experiment ${exp}" >&2; return 1 ;;
+    esac
+    CUDA_VISIBLE_DEVICES=${gpu} python scripts/batch_eval.py generate --config "${INFER_CONFIG}" \
+        --experiment "${exp}" ${n} --seeds "${SEEDS}" ${LIMIT} --out-dir "${dir}"
+    CUDA_VISIBLE_DEVICES=${gpu} python scripts/batch_eval.py score --manifest "${dir}/manifest.jsonl"
+    python scripts/batch_eval.py summarize --results "${dir}/results.jsonl"
+}
+
+mkdir -p "${OUT_DIR}"
+pids=()
+for i in "${!EXPS[@]}"; do
+    run_experiment "${EXPS[$i]}" "${i}" > "${OUT_DIR%/}.${EXPS[$i]}.log" 2>&1 &
+    pids+=($!)
+done
+status=0
+for i in "${!pids[@]}"; do
+    if wait "${pids[$i]}"; then echo "ok     ${EXPS[$i]}"; else echo "FAILED ${EXPS[$i]} (see ${OUT_DIR%/}.${EXPS[$i]}.log)"; status=1; fi
+done
+exit ${status}
