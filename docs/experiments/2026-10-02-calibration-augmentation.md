@@ -1,5 +1,7 @@
 # Absolute-calibration remedy: constant/permuted-sequence training augmentation (October 2, 2026)
 
+> **Update (2026-10-05):** the open discrepancy in Reading §3 is resolved in [2026-10-05-cluster-control-discrepancy](2026-10-05-cluster-control-discrepancy.md). The cluster *evaluation* reproduces the workstation numbers; the cluster run matches the original trajectory up to 10k and then regresses (a failure tail where ramps lose their neutral start). Both arms here were compared at 25k, inside that degraded regime. See that entry for the 10k re-evaluation.
+
 First attempt at the fix direction named in [2026-07-14](2026-07-14-tier12-batch-eval.md) (point 4) and [2026-07-21](2026-07-21-fineface-headtohead.md): the model has relative/ordinal smile control but **no absolute calibration** (constant-list CLS 0.07 vs FineFace 0.50), attributed to ramp-only training. Calibration is on the critical path of the post-qualification direction ([2026-09-24 prompt-decoupled operator](2026-09-24-prompt-decoupled-operator.md)).
 
 ## Diagnosis (code + labels)

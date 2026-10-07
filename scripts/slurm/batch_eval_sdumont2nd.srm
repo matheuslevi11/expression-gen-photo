@@ -55,6 +55,9 @@ EXPERIMENTS=${EXPERIMENTS:-"calibration scaled permuted"}
 SEEDS=${SEEDS:-42,43,44}
 LIMIT=${LIMIT:+--limit ${LIMIT}}   # optional cap on jobs per experiment (smoke tests)
 
+echo "host $(hostname), CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-<unset>}"
+nvidia-smi --query-gpu=index,pci.bus_id,utilization.gpu,memory.used --format=csv,noheader || true
+
 read -r -a EXPS <<< "${EXPERIMENTS}"
 NGPU=$(python -c "import torch; print(torch.cuda.device_count())")
 [ "${#EXPS[@]}" -le "${NGPU}" ] || { echo "${#EXPS[@]} experiments but only ${NGPU} GPUs" >&2; exit 1; }
@@ -67,6 +70,9 @@ run_experiment() {
         calibration|permuted|extrapolation) n="--num-prompts 10" ;;
         *) echo "unknown experiment ${exp}" >&2; return 1 ;;
     esac
+    # load_models() silently falls back to CPU (~250x slower) when CUDA is unusable.
+    CUDA_VISIBLE_DEVICES=${gpu} python -c "import torch, sys; torch.zeros(1, device='cuda')" \
+        || { echo "CUDA unusable for ${exp} on $(hostname) GPU ${gpu}" >&2; return 3; }
     CUDA_VISIBLE_DEVICES=${gpu} python scripts/batch_eval.py generate --config "${INFER_CONFIG}" \
         --experiment "${exp}" ${n} --seeds "${SEEDS}" ${LIMIT} --out-dir "${dir}"
     CUDA_VISIBLE_DEVICES=${gpu} python scripts/batch_eval.py score --manifest "${dir}/manifest.jsonl"
@@ -76,7 +82,7 @@ run_experiment() {
 mkdir -p "${OUT_DIR}"
 pids=()
 for i in "${!EXPS[@]}"; do
-    run_experiment "${EXPS[$i]}" "${i}" > "${OUT_DIR%/}.${EXPS[$i]}.log" 2>&1 &
+    run_experiment "${EXPS[$i]}" "${i}" >> "${OUT_DIR%/}.${EXPS[$i]}.log" 2>&1 &
     pids+=($!)
 done
 status=0
