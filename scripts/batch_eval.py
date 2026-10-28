@@ -28,6 +28,8 @@ Subcommands::
 Experiments (--experiment):
     scaled         prompts x seeds x ascending [0,.25,.5,.75,1]         (Tier 2)
     calibration    prompts x constant [c]*5, c in 0..1 step .1          (Tier 1, CLS)
+    calibration_jitter  same levels, each frame c +- U(0.02): near-constant
+                   values with non-zero (training-like) CCL channels
     permuted       prompts x seeds x 3 fixed non-monotonic lists        (Tier 2)
     extrapolation  prompts x constant lists outside [0,1]               (Tier 3)
 
@@ -60,6 +62,9 @@ PERMUTATIONS = [
     [0.5, 0.0, 1.0, 0.75, 0.25],
 ]
 CALIBRATION_LEVELS = [round(c, 1) for c in np.arange(0.0, 1.01, 0.1)]
+# Near-constant lists: identical commanded values make the CCL channels exactly zero,
+# which never happens in training; a tiny per-frame jitter keeps the CCL training-like.
+CALIBRATION_JITTER = 0.02
 EXTRAPOLATION_LEVELS = [-0.5, -0.25, 1.25, 1.5]
 
 
@@ -87,6 +92,18 @@ def build_jobs(experiment: str, prompts: list[str], seeds: list[int]) -> list[di
                 for li, lst in enumerate(PERMUTATIONS):
                     jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
                                      intensities=lst, perm_idx=li))
+    elif experiment == "calibration_jitter":
+        for pi, prompt in enumerate(prompts):
+            for seed in seeds:
+                for li, c in enumerate(CALIBRATION_LEVELS):
+                    rng = np.random.default_rng([pi, seed, li])  # identical lists across models
+                    # 5 values distinct at the CCL prompt's 3-decimal precision, so no two
+                    # frames share a prompt (that frame's CCL would be zero); reflected at 0/1.
+                    grid = np.abs(np.round(c + np.arange(-20, 21) / 1000 * CALIBRATION_JITTER / 0.02, 3))
+                    grid = np.unique(np.where(grid > 1.0, np.round(2.0 - grid, 3), grid))
+                    vals = rng.choice(grid, size=5, replace=False)
+                    jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
+                                     intensities=[float(v) for v in vals], level=c))
     elif experiment == "extrapolation":
         for pi, prompt in enumerate(prompts):
             for seed in seeds:
@@ -331,7 +348,7 @@ def cmd_summarize(args):
             vals = [r.get(key) for r in rows if key in r]
             if vals:
                 s[key] = _stats(vals)
-        if exp in ("calibration", "extrapolation"):
+        if exp in ("calibration", "calibration_jitter", "extrapolation"):
             # dose–response: mean detected AU12 per commanded level, and CLS =
             # Pearson over all pooled (level, per-frame detected) pairs.
             curve, pooled_c, pooled_d = {}, [], []
@@ -382,7 +399,7 @@ def main():
     g = sub.add_parser("generate", help="generate a sweep of samples (one pipeline load)")
     g.add_argument("--config", required=True, help="inference YAML (trained or baseline)")
     g.add_argument("--experiment", required=True,
-                   choices=["scaled", "calibration", "permuted", "extrapolation"])
+                   choices=["scaled", "calibration", "calibration_jitter", "permuted", "extrapolation"])
     g.add_argument("--prompts", default=str(REPO_ROOT / "configs/eval_prompts.txt"))
     g.add_argument("--num-prompts", type=int, default=None,
                    help="use only the first N prompts (default: all)")

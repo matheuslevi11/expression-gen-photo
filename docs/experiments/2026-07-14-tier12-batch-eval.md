@@ -1,5 +1,7 @@
 # Tier 1 + Tier 2 batch evaluation (July 13–14, 2026)
 
+> **Correction notice (October 7, 2026):** the calibration diagnosis here — no absolute calibration, *caused by* ramp-only training, control only relative/ordinal — is **largely an artifact of the protocol**. Exact-constant lists `[c]×5` make the CCL conditioning channels exactly zero, an input never seen in training. With a ≤0.02 per-frame dither (training-like CCL) the same model lineage reaches CLS 0.50 (py-feat) / 0.30 (MediaPipe) instead of 0.08 / 0.07. See [`2026-10-07-ccl-zero-test.md`](2026-10-07-ccl-zero-test.md). The measurements in this file remain valid for exact-constant commands; the scaled, permuted and identity results are unaffected.
+
 First statistically grounded evaluation of the 100 k checkpoint, run with `scripts/batch_eval.py` (commit `ab81908`). 540 trained samples + 120 frozen-backbone baseline samples, three measurements per sample (py-feat AU12, MediaPipe mouth-corner smile proxy, facenet-VGGFace2 identity cosine). Outputs under `inference_output/batch_eval/{trained,baseline}/` (manifests, per-sample results, summaries).
 
 **Headline: the model has strong *relative* (trajectory-following) expression control and high identity consistency, but NO absolute intensity calibration — constant-intensity clips produce a near-constant broad smile regardless of the commanded level (pooled CLS = 0.07).** The July smoke-test anomaly is confirmed at scale.

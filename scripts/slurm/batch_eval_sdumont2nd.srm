@@ -3,6 +3,7 @@
 # experiment runs generate -> score -> summarize on its own GPU, in parallel.
 # Protocol sizes follow docs/experiments/2026-07-14-tier12-batch-eval.md:
 #   calibration  10 prompts x 3 seeds x 11 constant levels   (330 samples)
+#   calibration_jitter  same, each frame c +- U(0.02)        (330)
 #   scaled       40 prompts x 3 seeds x ascending ramp       (120)
 #   permuted     10 prompts x 3 seeds x 3 fixed lists        (90)
 #   extrapolation 10 prompts x 3 seeds x 4 out-of-range levels (120)
@@ -67,7 +68,7 @@ run_experiment() {
     local exp=$1 gpu=$2 dir="${OUT_DIR}/$1" n
     case "${exp}" in
         scaled) n="" ;;
-        calibration|permuted|extrapolation) n="--num-prompts 10" ;;
+        calibration|calibration_jitter|permuted|extrapolation) n="--num-prompts 10" ;;
         *) echo "unknown experiment ${exp}" >&2; return 1 ;;
     esac
     # load_models() silently falls back to CPU (~250x slower) when CUDA is unusable.

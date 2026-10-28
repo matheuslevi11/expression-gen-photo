@@ -1,9 +1,11 @@
 """Paired comparison of two batch_eval runs (e.g. control vs. a training remedy).
 
 Each run dir holds ``<experiment>/results.jsonl`` as written by
-``scripts/slurm/batch_eval_sdumont2nd.srm``. Samples are paired by id (same
-prompt, seed and intensity list), and 95% CIs come from a paired bootstrap over
-(prompt, seed) units, so prompt/seed difficulty is shared between the arms.
+``scripts/slurm/batch_eval_sdumont2nd.srm``. Samples are paired by (prompt, seed,
+level, permutation), and 95% CIs come from a paired bootstrap over (prompt, seed)
+units, so prompt/seed difficulty is shared between the arms. ``--exp-b`` compares
+a different protocol of B against A (e.g. calibration vs calibration_jitter of one
+model: pass the same dir to --a and --b).
 
     python scripts/compare_eval.py \
         --a inference_output/batch_eval/calib_ctrl_25k --name-a ctrl \
@@ -29,7 +31,10 @@ def load(run_dir: Path, experiment: str) -> dict[str, dict]:
     path = run_dir / experiment / "results.jsonl"
     if not path.exists():
         return {}
-    return {r["id"]: r for r in map(json.loads, path.read_text().splitlines()) if r}
+    rows = [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
+    keyed = {(r.get("prompt_idx"), r.get("seed"), r.get("level"), r.get("perm_idx")): r for r in rows}
+    assert len(keyed) == len(rows), f"pairing key not unique in {path}"
+    return keyed
 
 
 def pooled_cls(rows, key):
@@ -66,7 +71,7 @@ def compare(a: dict, b: dict, experiment: str, n_boot: int, rng) -> dict:
         units[(a[i].get("prompt_idx"), a[i].get("seed"))].append((a[i], b[i]))
     out = dict(n_paired=len(ids), n_units=len(units), only_a=len(set(a) - set(b)), only_b=len(set(b) - set(a)))
 
-    if experiment in ("calibration", "extrapolation"):
+    if experiment in ("calibration", "calibration_jitter", "extrapolation"):
         for key, label in CLS_DETECTORS:
             out[label] = {
                 "a": bootstrap(units, lambda p: pooled_cls([x for x, _ in p], key), n_boot, rng),
@@ -103,7 +108,8 @@ def main():
     p.add_argument("--b", required=True, type=Path)
     p.add_argument("--name-a", default="a")
     p.add_argument("--name-b", default="b")
-    p.add_argument("--experiments", default="calibration,scaled,permuted,extrapolation")
+    p.add_argument("--experiments", default="calibration,calibration_jitter,scaled,permuted,extrapolation")
+    p.add_argument("--exp-b", default=None, help="protocol to read from --b instead of the same one")
     p.add_argument("--n-boot", type=int, default=2000)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", type=Path, default=None, help="optional JSON output")
@@ -112,11 +118,11 @@ def main():
     rng = np.random.default_rng(args.seed)
     report = {}
     for exp in args.experiments.split(","):
-        a, b = load(args.a, exp), load(args.b, exp)
+        a, b = load(args.a, exp), load(args.b, args.exp_b or exp)
         if not a or not b:
             continue
         r = report[exp] = compare(a, b, exp, args.n_boot, rng)
-        print(f"\n== {exp}  paired n={r['n_paired']} over {r['n_units']} (prompt, seed) units"
+        print(f"\n== {exp}" + (f" vs {args.exp_b}" if args.exp_b else "") + f"  paired n={r['n_paired']} over {r['n_units']} (prompt, seed) units"
               + (f"  [unpaired: {args.name_a} {r['only_a']}, {args.name_b} {r['only_b']}]" if r["only_a"] or r["only_b"] else ""))
         print(f"   {'metric':16s} {args.name_a:>26s} {args.name_b:>26s} {args.name_b + '-' + args.name_a:>26s}")
         for metric, v in r.items():
