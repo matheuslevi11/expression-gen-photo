@@ -79,12 +79,13 @@ def compare(a: dict, b: dict, experiment: str, n_boot: int, rng) -> dict:
                 "b-a": bootstrap(units, lambda p: pooled_cls([y for _, y in p], key)
                                  - pooled_cls([x for x, _ in p], key), n_boot, rng),
             }
-        curve = defaultdict(lambda: ([], []))
-        for i in ids:
-            if a[i].get("au12") and b[i].get("au12"):
-                curve[a[i]["level"]][0].extend(a[i]["au12"])
-                curve[a[i]["level"]][1].extend(b[i]["au12"])
-        out["curve_au12"] = {str(lvl): (mean_finite(x), mean_finite(y)) for lvl, (x, y) in sorted(curve.items())}
+        for key, _ in CLS_DETECTORS:
+            curve = defaultdict(lambda: ([], []))
+            for i in ids:
+                if a[i].get(key) and b[i].get(key):
+                    curve[a[i]["level"]][0].extend(a[i][key])
+                    curve[a[i]["level"]][1].extend(b[i][key])
+            out[f"curve_{key}"] = {str(lvl): (mean_finite(x), mean_finite(y)) for lvl, (x, y) in sorted(curve.items())}
     else:
         for key in PER_SAMPLE_KEYS:
             out[key] = {
@@ -128,10 +129,11 @@ def main():
         for metric, v in r.items():
             if isinstance(v, dict) and "b-a" in v:
                 print(f"   {metric:16s} {fmt(v['a']):>26s} {fmt(v['b']):>26s} {fmt(v['b-a']):>26s}")
-        if "curve_au12" in r:
-            print(f"   detected py-feat AU12 by commanded level ({args.name_a} -> {args.name_b}):")
-            for lvl, (x, y) in r["curve_au12"].items():
-                print(f"     {float(lvl):+.2f}: {x:.3f} -> {y:.3f}")
+        for key, label in (("au12", "py-feat AU12"), ("mp_smile", "MediaPipe smile")):
+            if f"curve_{key}" in r:
+                print(f"   detected {label} by commanded level ({args.name_a} -> {args.name_b}):")
+                for lvl, (x, y) in r[f"curve_{key}"].items():
+                    print(f"     {float(lvl):+.2f}: {x:.3f} -> {y:.3f}")
     if args.out:
         args.out.write_text(json.dumps(report, indent=2))
 

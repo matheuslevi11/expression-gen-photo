@@ -1,5 +1,7 @@
 # Is the zero CCL of exact-constant lists hurting calibration? (October 7, 2026)
 
+> **Correction notice (2026-10-28):** Reading §2 ("this reverses the calibration half of the FineFace comparison") holds only on py-feat and only for the 25k. On MediaPipe, FineFace still leads every ramp-only checkpoint (0.49 vs 0.26–0.30, dithered). On the 100k the thesis cites, dithered CLS is 0.30 / 0.26, behind FineFace on both detectors. See [`2026-10-28-fineface-both-detectors.md`](2026-10-28-fineface-both-detectors.md).
+
 Inference-only test of the structural suspect from [2026-10-02](2026-10-02-calibration-augmentation.md) (Reading §2) and [2026-10-05](2026-10-05-cluster-control-discrepancy.md): the calibration protocol commands exact-constant lists `[c]×5`, which make the 3 CCL channels exactly zero (at c = 0.0 the whole 6-channel conditioning is zero). Training never produces that: even "constant" augmented sequences carry distinct real labels.
 
 ## The CCL is a "prompt changed" flag, not a magnitude

@@ -2,6 +2,8 @@
 
 > **Correction notice (October 7, 2026):** the calibration half of this comparison (FineFace CLS 0.497 vs ours 0.075) was measured with exact-constant lists, which zero our CCL conditioning channels. With a ≤0.02 dither our original lineage reaches py-feat CLS **0.501**, on par with FineFace; the MediaPipe-side comparison has not been computed yet. See [`2026-10-07-ccl-zero-test.md`](2026-10-07-ccl-zero-test.md). The ramp-following and identity results here are unaffected.
 
+> **Update (2026-10-28):** the correction above is itself narrowed. On the label-independent MediaPipe detector FineFace still wins calibration: 0.494 vs 0.26–0.30 for our ramp-only checkpoints, dithered. On the 100k compared here it wins on both detectors even with dither (0.497 vs 0.303 py-feat). The calibration verdict of this file stands, at about half the size. See [`2026-10-28-fineface-both-detectors.md`](2026-10-28-fineface-both-detectors.md).
+
 The Tier-1 external comparison against FineFace (arXiv 2407.20175), the closest prior art (AU-intensity-conditioned text-to-image generation; see [2026-07-11 study](2026-07-11-related-work-study.md)). Covers getting it running and the full quantitative result.
 
 **Bottom line (honest):** on matched prompts/seeds, FineFace **ties us on ramp-following**, **decisively beats us on absolute intensity calibration** (CLS 0.50 vs our 0.07), and we **modestly but consistently beat it on cross-frame identity** (worst-case adjacent cosine +0.12, winning 68% of prompts). Our defensible contribution narrows to the **sequence-native temporal formulation** (one identity-consistent clip vs N independent stills), not superior expression control.
