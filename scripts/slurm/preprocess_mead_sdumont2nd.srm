@@ -1,0 +1,83 @@
+#!/bin/bash
+# MEAD preprocessing (scripts/preprocess_mead.py) sharded by actor over one
+# SDumont2nd H100 node: NSHARDS processes, round-robin over the GPUs, each
+# writing its own OUT_ROOT/shard_<k>/ (frames + annotations/{train,validation}.json).
+# Merge the shards into the training root with scripts/merge_mead_emotion.py.
+#
+# Usage (from the repo root):
+#   MEAD_ROOT=/petrobr/crono/.../MEAD_raw_subset OUT_ROOT=/petrobr/crono/.../MEAD_neutral_processed \
+#   EMOTION=neutral sbatch scripts/slurm/preprocess_mead_sdumont2nd.srm
+#   EMOTION=happy ACTORS="M003" NSHARDS=1 ... sbatch --gpus-per-node=1 --cpus-per-task=24 ...
+#
+# MEAD_ROOT must hold <actor>/video/<view>/<emotion>/level_<n>/*.mp4 (or the
+# original video*.tar archives). py-feat weights for the preprocessing detector
+# (emotion svm, identity facenet) must be cached: compute nodes have no internet;
+# instantiate preprocess_mead.AUEstimator("pyfeat") once on a login node first.
+
+#SBATCH --job-name=preprocess-mead
+#SBATCH --account=crono
+#SBATCH --partition=petrobr-h100
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-node=4
+#SBATCH --cpus-per-task=96
+#SBATCH --time=06:00:00
+#SBATCH --output=slurm_logs/%x-%j.out
+#SBATCH --error=slurm_logs/%x-%j.err
+
+set -euo pipefail
+
+module load arch_gpu
+module load anaconda3/2024.10
+
+# conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
+set +u
+source "$(conda info --base)/etc/profile.d/conda.sh"
+# sbatch exports the submitting shell's env: if genphoto was active there, the
+# module load above put base conda first on PATH and a plain activate is a no-op.
+while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
+conda activate genphoto
+set -u
+[ "$(command -v python)" = "${CONDA_PREFIX}/bin/python" ] || { echo "wrong python: $(command -v python)" >&2; exit 1; }
+
+cd "${SLURM_SUBMIT_DIR}"
+export PYTHONUNBUFFERED=1
+
+: "${MEAD_ROOT:?set MEAD_ROOT to the raw MEAD root}"
+: "${OUT_ROOT:?set OUT_ROOT to a fresh output dir (not the training MEAD_processed)}"
+EMOTION=${EMOTION:-neutral}
+VAL_ACTORS=${VAL_ACTORS:-"W009 W011"}   # the 2-actor holdout of the happy split
+NSHARDS=${NSHARDS:-8}
+
+echo "host $(hostname), CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-<unset>}"
+nvidia-smi --query-gpu=index,pci.bus_id,utilization.gpu,memory.used --format=csv,noheader || true
+
+if [ -n "${ACTORS:-}" ]; then read -r -a ALL <<< "${ACTORS}"
+else mapfile -t ALL < <(find "${MEAD_ROOT}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort); fi
+NGPU=$(python -c "import torch; print(torch.cuda.device_count())")
+[ "${NGPU}" -ge 1 ] || { echo "no usable GPU" >&2; exit 3; }
+[ "${NSHARDS}" -le "${#ALL[@]}" ] || NSHARDS=${#ALL[@]}
+export OMP_NUM_THREADS=$(( SLURM_CPUS_PER_TASK / NSHARDS ))
+echo "${#ALL[@]} actors, ${NSHARDS} shards over ${NGPU} GPUs, emotion=${EMOTION}"
+
+pids=()
+for (( k = 0; k < NSHARDS; k++ )); do
+    shard=()
+    for (( i = k; i < ${#ALL[@]}; i += NSHARDS )); do shard+=("${ALL[$i]}"); done
+    gpu=$(( k % NGPU ))
+    dir="${OUT_ROOT}/shard_${k}"
+    mkdir -p "${dir}"
+    echo "shard ${k} (GPU ${gpu}): ${shard[*]}"
+    CUDA_VISIBLE_DEVICES=${gpu} python -c "import torch; torch.zeros(1, device='cuda')" \
+        || { echo "CUDA unusable on $(hostname) GPU ${gpu}" >&2; exit 3; }
+    CUDA_VISIBLE_DEVICES=${gpu} python scripts/preprocess_mead.py \
+        --mead-root "${MEAD_ROOT}" --out-root "${dir}" --emotion "${EMOTION}" --view front \
+        --actors "${shard[@]}" --val-actors ${VAL_ACTORS} --frames-per-clip 24 --au-method pyfeat \
+        >> "${dir}/preprocess.log" 2>&1 &
+    pids+=($!)
+done
+status=0
+for k in "${!pids[@]}"; do
+    if wait "${pids[$k]}"; then echo "ok     shard ${k}"; else echo "FAILED shard ${k} (see ${OUT_ROOT}/shard_${k}/preprocess.log)"; status=1; fi
+done
+exit ${status}

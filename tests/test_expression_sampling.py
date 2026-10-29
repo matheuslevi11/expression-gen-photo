@@ -11,8 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from genphoto.data.expression_dataset import (  # noqa: E402
+    _build_bridge_pairs,
     _build_constant_pool,
     _normalize_mode_probs,
+    _select_bridge_clips,
+    _select_bridge_progression,
     _select_constant_frames,
     _select_intensity_progression,
     _select_permuted_progression,
@@ -35,6 +38,7 @@ def test_normalize_mode_probs():
         "ramp": 0.5, "constant": 0.3, "permuted": 0.2,
     }
     assert _normalize_mode_probs({"ramp": 1, "permuted": 0}) == {"ramp": 1.0}
+    assert _normalize_mode_probs({"ramp": 1, "bridge": 1}) == {"ramp": 0.5, "bridge": 0.5}
     assert _raises(lambda: _normalize_mode_probs({"ramp": 1, "reverse": 1}))
     assert _raises(lambda: _normalize_mode_probs({"ramp": -1, "constant": 2}))
     assert _raises(lambda: _normalize_mode_probs({"ramp": 0}))
@@ -85,6 +89,35 @@ def test_permuted_uses_ramp_frames_in_non_identity_order():
 def test_permuted_single_frame_is_ramp():
     assert _select_permuted_progression([0.3, 0.6], 1, random.Random(0)) == _select_intensity_progression([0.3, 0.6], 1)
 
+
+def test_bridge_pairs_need_both_emotions_per_actor():
+    actors = ["A", "A", "B", "A", "C", "C", "B"]
+    emotions = ["neutral", "happy", "happy", "Happy", "neutral", "sad", "happy"]
+    assert _build_bridge_pairs(actors, emotions, "neutral", "happy") == [([0], [1, 3])]
+    assert _build_bridge_pairs(actors, emotions, "neutral", "angry") == []
+
+
+def test_bridge_clip_selection_is_uniform_over_actors_and_same_actor():
+    actors = ["A"] * 40 + ["B"] * 4
+    emotions = (["neutral"] * 10 + ["happy"] * 30) + ["neutral", "happy", "happy", "happy"]
+    pairs = _build_bridge_pairs(actors, emotions, "neutral", "happy")
+    rng = random.Random(0)
+    draws = [_select_bridge_clips(pairs, rng) for _ in range(4000)]
+    for low, high in draws:
+        assert actors[low] == actors[high]
+        assert (emotions[low], emotions[high]) == ("neutral", "happy")
+    assert 0.45 < sum(actors[low] == "B" for low, _ in draws) / len(draws) < 0.55
+
+
+def test_bridge_progression_ramps_from_low_clip_to_high_clip():
+    low = [0.05, 0.0, 0.3, 0.01, 0.02, 0.1]
+    high = [0.4, 0.9, 0.6, 0.95, 0.8, 0.5]
+    picks = _select_bridge_progression(low, high, N)
+    values = [(low, high)[side][i] for side, i in picks]
+    assert values == sorted(values)
+    assert picks[0] == (0, 1) and picks[-1] == (1, 3)  # global min (low clip) .. global max (high clip)
+    assert len(set(picks)) == N
+    assert _select_bridge_progression([0.1, 0.2, 0.3], [0.7, 0.8, 0.9], 6) == [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]
 
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

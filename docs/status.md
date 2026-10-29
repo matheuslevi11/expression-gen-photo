@@ -2,7 +2,7 @@
 
 Living document: current state of the Generative Photography → **Generative Expressions** fork. Edited destructively — checked items get checked, wrong claims get deleted. History and full experiment write-ups live in [`experiments/`](experiments/) (append-only, date-stamped). Design rationale: [`plan.md`](plan.md). Usage commands: root [`README.md`](../README.md). Doc conventions: root [`CLAUDE.md`](../CLAUDE.md).
 
-*Last updated: October 28, 2026.*
+*Last updated: October 29, 2026.*
 
 ---
 
@@ -59,6 +59,8 @@ Batch-evaluated at scale (2026-07-14): ascending-ramp control **r = 0.77 ± 0.21
 | 2026-10-07 | [CCL zero test](experiments/2026-10-07-ccl-zero-test.md) | Inference-only: exact `[c]×5` lists zero the CCL channels (CCL is a "prompt changed" flag, not a magnitude). Same models, same seeds, ≤0.02 per-frame dither: **CLS 0.08 → 0.50 py-feat / 0.07 → 0.30 MediaPipe on the original lineage** (= FineFace's 0.497 on py-feat only; ⚠️ see 2026-10-28), 0.16 → 0.63 / 0.49 for the augmented arm at 25k; all 5 models gain on both detectors. July's "no absolute calibration" was mostly a protocol artifact. Residual: c = 0 over-smiles. |
 | 2026-10-28 | [FineFace on both detectors](experiments/2026-10-28-fineface-both-detectors.md) | FineFace's MediaPipe CLS is **0.494** (py-feat 0.497). Dithered ramp-only checkpoints trail it on MediaPipe: 25k 0.30 (Δ −0.20), and the thesis 100k (transferred, reproduces July) 0.30 / 0.26 (Δ −0.19 / −0.24 on both detectors). FineFace's calibration win **stands at half the July size**. Aug 25k ties it on MediaPipe (0.491), but its ramps regressed; no checkpoint matches FineFace on both axes yet. 25k dominates 100k. Our c = 0 still smiles (py-feat ≥ 0.4). |
 | 2026-10-28 | [checkpoint selection + held-out confirmation](experiments/2026-10-28-checkpoint-selection-confirmation.md) | The aug arm's 15k looked balanced vs FineFace on the eval units, but **held-out units** (prompts 10–29, seeds 45–47) show partial selection inflation. Aug 15k − original 25k: MediaPipe CLS **+0.06** (CI just excludes 0), ramp MediaPipe r −0.05, **permuted r +0.28/+0.31** (the robust augmentation effect). Averaging the 15k and 20k weights is worse than the 15k alone. All checkpoints degrade by losing the ramp's neutral start (constant LR, no EMA). No standalone stabilisation retrain; fold LR decay + EMA into the low-end-data retrain. |
+| 2026-10-29 | [MEAD neutral clips + label bias](experiments/2026-10-29-mead-neutral-clips-label-bias.md) | 1,876 front neutral clips (47 actors) preprocessed on the cluster and merged (`*_happy_neutral.json`); the cluster labeler matches May's (r 0.998). Low-level constant support rises from 41/200 to 555/1,390 clips at c = 0/0.1. **py-feat AU12 has an actor-level offset tied to skin tone** (Spearman vs face luma −0.64 neutral / −0.40 happy; MediaPipe n.s.): darker faces read higher at the same geometry. Labels and eval both inherit it. |
+| 2026-10-29 | [low-end retrain design](experiments/2026-10-29-low-end-retrain-design.md) | Pre-registration (no result yet). Control (aug recipe, happy, raw labels) vs treatment (happy + neutral, **per-actor normalized labels**, **neutral → smile bridge ramps**). Both arms: 25k steps, cosine LR + EMA 0.999. Primary: EMA-25k, treatment − control on held-out units; low end judged on MediaPipe. |
 
 ---
 
@@ -106,11 +108,12 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 
 - **MEAD happy clips** often have high AU12 even at lower labeled intensity levels; the dataset uses sorted-frame ramps and, for validation, decouples fixed `intensity_list` targets from which pixels are shown.
 - **Constant commands must be dithered** — exact-constant lists `[c]×5` zero the CCL channels (an out-of-distribution input) and collapse calibration to CLS 0.07; a ≤0.02 per-frame dither restores it (original 25k 0.50 py-feat / 0.30 MediaPipe, 100k 0.30 / 0.26; 2026-10-02 augmentation at 25k: 0.63 / 0.49). Residual: c = 0 (near-zero scalar) still over-smiles for most models. Principled fix: a magnitude-aware CCL (needs retraining). Late-training drift (2026-10-05) also moves CLS, so compare calibration across checkpoints.
-- **Calibration trails FineFace on the label-independent detector** (MediaPipe CLS 0.26–0.30 vs 0.49, dithered), and our scale has no neutral bottom: c = 0 still reads py-feat ≥ 0.4 vs FineFace's 0.05 (MEAD-happy has almost no low-AU12 frames).
+- **Calibration trails FineFace on the label-independent detector** (MediaPipe CLS 0.26–0.30 vs 0.49, dithered), and our scale has no neutral bottom: c = 0 still reads py-feat ≥ 0.4 vs FineFace's 0.05 (MEAD-happy has almost no low-AU12 frames; low-end retrain with neutral clips in progress, 2026-10-29).
 - **Ramp-following is on par with, not better than, prior art** — matched-prompt AU12 r ties FineFace (0.77 vs 0.79). The contribution is the sequence-native temporal formulation + modestly better cross-frame identity, not superior control.
-- **Male baseline-smile bias (data-specific)** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female). FineFace shows the *opposite* skew (male 0.82 > female 0.77), localizing the bias to the MEAD-happy training distribution rather than AU-conditioned generation generally. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required.
+- **py-feat AU12 reads higher on darker skin at the same mouth geometry** (2026-10-29; luma proxy, MediaPipe shows no trend). It affects (i) raw training labels, which tie the intensity scale to identity (addressed in the low-end retrain by per-actor normalization), and (ii) the eval, whose prompts 15–24 name ethnicities. Judge absolute levels on MediaPipe, and split results by prompt group before any demographic claim.
+- **Male baseline-smile bias (data-specific)** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female). FineFace shows the *opposite* skew (male 0.82 > female 0.77), localizing the bias to the MEAD-happy training distribution rather than AU-conditioned generation generally. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required. Measured with py-feat; given its skin-tone offset (above), part of it may be detector-driven.
 - **Option A embedding only** — scalar broadcast + CCL; no landmark flow or multi-AU control yet.
-- **Single emotion filter** — default `happy` only; multi-emotion is a follow-up.
+- **Emotions** — happy only, plus neutral clips for the low end (2026-10-29); other emotions / multi-AU are a follow-up.
 - **No identity regularizer** in the loss (ArcFace).
 - **Camera adaptor checkpoints** from the original paper are not used; the expression encoder trains from scratch.
 
@@ -180,9 +183,11 @@ python scripts/batch_eval.py summarize \
 ```
 train_expression.py              # training entry
 inference_expression.py          # inference entry (--seed for reproducible ablations)
-genphoto/data/expression_dataset.py   # sequence_mode_probs: ramp/constant/permuted train-time mix
-tests/test_expression_sampling.py    # sampling unit tests (python tests/test_expression_sampling.py)
+genphoto/data/expression_dataset.py   # sequence_mode_probs: ramp/constant/permuted/bridge train-time mix
+tests/                               # sampling + label-normalization unit tests (python tests/<file>.py)
 scripts/preprocess_mead.py
+scripts/merge_mead_emotion.py                     # merge sharded preprocess output for one emotion into MEAD_processed
+scripts/normalize_labels_per_actor.py             # AU12 labels relative to each actor's neutral median
 scripts/_validate_dataset_and_model.py            # static validator
 scripts/export_results.sh                         # stage results tarball for scp/rsync pull
 scripts/batch_eval.py                             # generate/score/summarize eval sweeps (--prompt-offset: held-out prompts)
@@ -195,7 +200,8 @@ configs/train_genphoto/expression_validation.yaml # verified production-path val
 configs/train_genphoto/expression_sdumont2nd.yaml       # full train, SDumont2nd cluster (placeholders)
 configs/train_genphoto/expression_sdumont2nd_smoke.yaml # 6-step multi-node smoke, SDumont2nd
 configs/train_genphoto/expression_calib_{aug,ctrl}.yaml # 2026-10-02 calibration arms (placeholders)
-scripts/slurm/                                    # sbatch launchers for SDumont2nd (train, smoke, batch_eval)
+configs/train_genphoto/expression_lowend_{ctrl,treat}.yaml # 2026-10-29 low-end retrain arms (placeholders)
+scripts/slurm/                                    # sbatch launchers for SDumont2nd (train, smoke, batch_eval, preprocess_mead)
 configs/inference_genphoto/expression.yaml        # trained-adaptor inference
 configs/inference_genphoto/expression_baseline.yaml # fair frozen-backbone baseline
 comp_metrics/expression_au_accuracy.py

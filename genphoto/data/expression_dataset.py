@@ -133,7 +133,7 @@ def _select_intensity_progression(
     return [int(order[p]) for p in picks]
 
 
-SEQUENCE_MODES = ("ramp", "constant", "permuted")
+SEQUENCE_MODES = ("ramp", "constant", "permuted", "bridge")
 
 
 def _normalize_mode_probs(mode_probs: Mapping[str, float]) -> Dict[str, float]:
@@ -199,6 +199,45 @@ def _select_permuted_progression(
     return [ramp[p] for p in perm]
 
 
+def _build_bridge_pairs(
+    clip_actors: Sequence[str],
+    clip_emotions: Sequence[str],
+    low_emotion: str,
+    high_emotion: str,
+) -> List[Tuple[List[int], List[int]]]:
+    """Per actor with clips of both emotions: (``low_emotion`` clip indices, ``high_emotion`` ones)."""
+    by_actor: Dict[str, Tuple[List[int], List[int]]] = {}
+    for clip_idx, (actor, emotion) in enumerate(zip(clip_actors, clip_emotions)):
+        emotion = emotion.lower()
+        if emotion in (low_emotion, high_emotion):
+            by_actor.setdefault(actor, ([], []))[emotion == high_emotion].append(clip_idx)
+    return [by_actor[a] for a in sorted(by_actor) if all(by_actor[a])]
+
+
+def _select_bridge_clips(
+    pairs: Sequence[Tuple[Sequence[int], Sequence[int]]],
+    rng=random,
+) -> Tuple[int, int]:
+    """Uniform actor → uniform low-emotion clip and uniform high-emotion clip of that actor."""
+    low, high = rng.choice(pairs)
+    return rng.choice(low), rng.choice(high)
+
+
+def _select_bridge_progression(
+    low_intensities: Sequence[float],
+    high_intensities: Sequence[float],
+    sample_n_frames: int,
+) -> List[Tuple[int, int]]:
+    """The ramp selection over the union of two clips' frames, as (0 = low / 1 = high clip, frame).
+
+    With a neutral and a happy clip of the same actor this yields a neutral → full-smile ramp,
+    which MEAD-happy clips alone rarely reach at the low end.
+    """
+    n_low = len(low_intensities)
+    picks = _select_intensity_progression(list(low_intensities) + list(high_intensities), sample_n_frames)
+    return [(0, i) if i < n_low else (1, i - n_low) for i in picks]
+
+
 class ExpressionMEAD(Dataset):
     """Same-identity, varying-expression-intensity dataset built from preprocessed MEAD clips.
 
@@ -227,6 +266,12 @@ class ExpressionMEAD(Dataset):
     uniformly from ``constant_levels`` evenly spaced levels in [0, 1], from any clip supporting it)
     and *permuted* ramps. Conditioning is always the shown frames' own AU12 labels. ``None``
     keeps the ramp-only behaviour exactly.
+
+    A *bridge* sequence is a ramp over the union of one ``bridge_emotions[0]`` clip and one
+    ``bridge_emotions[1]`` clip of the same actor (uniform actor, then uniform clips), e.g. a
+    neutral → smile ramp; it needs ``emotion_filter`` to keep both emotions. ``ramp_emotions``
+    restricts ramp/permuted sequences to clips of those emotions (a sampled index outside them is
+    replaced by a uniform draw from them); constant sequences always draw from every clip.
     """
 
     def __init__(
@@ -242,6 +287,8 @@ class ExpressionMEAD(Dataset):
         sequence_mode_probs: Optional[Mapping[str, float]] = None,
         constant_levels: int = 11,
         constant_level_tolerance: float = 0.1,
+        ramp_emotions: Optional[Sequence[str]] = None,
+        bridge_emotions: Sequence[str] = ("neutral", "happy"),
     ) -> None:
         self.root_path = root_path
         self.sample_n_frames = sample_n_frames
@@ -264,6 +311,7 @@ class ExpressionMEAD(Dataset):
 
         self.sequence_mode_probs = None
         self.constant_pool = []
+        self.bridge_pairs = []
         if sequence_mode_probs is not None and is_Train:
             self.sequence_mode_probs = _normalize_mode_probs(sequence_mode_probs)
             if "constant" in self.sequence_mode_probs:
@@ -278,6 +326,21 @@ class ExpressionMEAD(Dataset):
                         f"No clip has {sample_n_frames} frames within ±{constant_level_tolerance} "
                         f"of any of {constant_levels} levels; cannot build constant sequences."
                     )
+            if "bridge" in self.sequence_mode_probs:
+                low, high = (e.lower() for e in bridge_emotions)
+                self.bridge_pairs = _build_bridge_pairs(
+                    [c["actor"] for c in self.dataset], [c.get("emotion", "") for c in self.dataset], low, high
+                )
+                if not self.bridge_pairs:
+                    raise ValueError(f"No actor has both {low!r} and {high!r} clips; cannot build bridge sequences.")
+
+        self.ramp_indices = None
+        if ramp_emotions is not None:
+            keep = {e.lower() for e in ramp_emotions}
+            self.ramp_indices = [i for i, c in enumerate(self.dataset) if c.get("emotion", "").lower() in keep]
+            if not self.ramp_indices:
+                raise ValueError(f"No clips with emotion in {sorted(keep)} for ramp/permuted sequences.")
+            self.ramp_index_set = set(self.ramp_indices)
 
         self.pixel_transforms = [
             transforms.Resize(sample_size),
@@ -301,29 +364,33 @@ class ExpressionMEAD(Dataset):
         modes = list(self.sequence_mode_probs)
         return random.choices(modes, weights=[self.sequence_mode_probs[m] for m in modes])[0]
 
-    def _load_clip(self, idx: int):
-        mode = "ramp"
-        if self.is_Train and self.sequence_mode_probs is not None:
-            mode = self._sample_sequence_mode()
-        constant_indices = None
+    def _clip_intensities(self, idx: int) -> List[float]:
+        return [self._frame_intensity(f) for f in self.dataset[idx]["frames"]]
+
+    def _train_frames(self, idx: int, mode: str) -> List[Tuple[int, int]]:
+        """(clip index, frame index) of each frame of a training sequence of ``mode``."""
         if mode == "constant":
-            idx, constant_indices = _select_constant_frames(self.constant_pool, self.sample_n_frames)
+            clip_idx, frames = _select_constant_frames(self.constant_pool, self.sample_n_frames)
+            return [(clip_idx, i) for i in frames]
+        if mode == "bridge":
+            clips = _select_bridge_clips(self.bridge_pairs)
+            picks = _select_bridge_progression(*(self._clip_intensities(c) for c in clips), self.sample_n_frames)
+            return [(clips[side], i) for side, i in picks]
+        if self.ramp_indices is not None and idx not in self.ramp_index_set:
+            idx = random.choice(self.ramp_indices)
+        select = _select_permuted_progression if mode == "permuted" else _select_intensity_progression
+        return [(idx, i) for i in select(self._clip_intensities(idx), self.sample_n_frames)]
 
-        clip = self.dataset[idx]
-        frames_meta = clip["frames"]
-        frame_paths = [f["path"] for f in frames_meta]
-        frame_intensities = [self._frame_intensity(f) for f in frames_meta]
-        caption = clip.get("caption", "A portrait photograph of a person.")
-
+    def _load_clip(self, idx: int):
         if self.is_Train:
-            if mode == "constant":
-                chosen_indices = constant_indices
-            elif mode == "permuted":
-                chosen_indices = _select_permuted_progression(frame_intensities, self.sample_n_frames)
-            else:
-                chosen_indices = _select_intensity_progression(frame_intensities, self.sample_n_frames)
-            chosen_intensities = [frame_intensities[i] for i in chosen_indices]
+            mode = "ramp"
+            if self.sequence_mode_probs is not None:
+                mode = self._sample_sequence_mode()
+            picks = self._train_frames(idx, mode)
+            chosen_intensities = [self._frame_intensity(self.dataset[c]["frames"][i]) for c, i in picks]
         else:
+            clip = self.dataset[idx]
+            frame_intensities = self._clip_intensities(idx)
             target_list = clip.get("intensity_list")
             if target_list is None:
                 chosen_indices = _select_intensity_progression(frame_intensities, self.sample_n_frames)
@@ -343,8 +410,12 @@ class ExpressionMEAD(Dataset):
                     frame_intensities, self.sample_n_frames
                 )
                 chosen_intensities = [float(t) for t in target_list]
+            picks = [(idx, i) for i in chosen_indices]
 
-        chosen_paths = [os.path.join(self.root_path, frame_paths[i]) for i in chosen_indices]
+        clip_indices = list(dict.fromkeys(c for c, _ in picks))
+        caption = self.dataset[clip_indices[0]].get("caption", "A portrait photograph of a person.")
+        clip_id = "+".join(self.dataset[c].get("clip_id", f"clip_{c}") for c in clip_indices)
+        chosen_paths = [os.path.join(self.root_path, self.dataset[c]["frames"][i]["path"]) for c, i in picks]
         images = []
         for path in chosen_paths:
             img = cv2.imread(path)
@@ -356,7 +427,7 @@ class ExpressionMEAD(Dataset):
         pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2).contiguous() / 255.0
 
         intensity_values = torch.tensor(chosen_intensities, dtype=torch.float32).unsqueeze(1)
-        return pixel_values, caption, intensity_values, clip.get("clip_id", f"clip_{idx}")
+        return pixel_values, caption, intensity_values, clip_id
 
     def get_batch(self, idx: int):
         pixel_values, caption, intensity_values, clip_id = self._load_clip(idx)
