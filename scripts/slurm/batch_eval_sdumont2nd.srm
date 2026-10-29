@@ -15,6 +15,8 @@
 #   EXPERIMENTS="calibration" ... sbatch --gpus-per-node=1 ...   # subset
 #   LIMIT=4 EXPERIMENTS="calibration scaled" ... sbatch --partition=h100_dev \
 #     --gpus-per-node=2 --cpus-per-task=48 --time=00:15:00 ...   # quick smoke
+#   SUBSET_OFFSET=10 SUBSET_PROMPTS=20 SEEDS=45,46,47 ...   # held-out units: the
+#     subset protocols use bank prompts 10-29 instead of 0-9; scaled keeps all 40
 #
 # Every stage is resumable, so resubmitting the same command continues where a
 # job stopped. Detector weights (py-feat, facenet, MediaPipe) must already be
@@ -55,6 +57,8 @@ export PYTHONUNBUFFERED=1
 EXPERIMENTS=${EXPERIMENTS:-"calibration scaled permuted"}
 SEEDS=${SEEDS:-42,43,44}
 LIMIT=${LIMIT:+--limit ${LIMIT}}   # optional cap on jobs per experiment (smoke tests)
+SUBSET_OFFSET=${SUBSET_OFFSET:-0}  # prompt subset for calibration*/permuted/extrapolation
+SUBSET_PROMPTS=${SUBSET_PROMPTS:-10}
 
 echo "host $(hostname), CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-<unset>}"
 nvidia-smi --query-gpu=index,pci.bus_id,utilization.gpu,memory.used --format=csv,noheader || true
@@ -68,7 +72,8 @@ run_experiment() {
     local exp=$1 gpu=$2 dir="${OUT_DIR}/$1" n
     case "${exp}" in
         scaled) n="" ;;
-        calibration|calibration_jitter|permuted|extrapolation) n="--num-prompts 10" ;;
+        calibration|calibration_jitter|permuted|extrapolation)
+            n="--num-prompts ${SUBSET_PROMPTS} --prompt-offset ${SUBSET_OFFSET}" ;;
         *) echo "unknown experiment ${exp}" >&2; return 1 ;;
     esac
     # load_models() silently falls back to CPU (~250x slower) when CUDA is unusable.

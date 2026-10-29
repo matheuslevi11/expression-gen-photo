@@ -68,32 +68,33 @@ CALIBRATION_JITTER = 0.02
 EXTRAPOLATION_LEVELS = [-0.5, -0.25, 1.25, 1.5]
 
 
-def load_prompts(path: Path, limit: int | None) -> list[str]:
+def load_prompts(path: Path, limit: int | None, offset: int = 0) -> list[str]:
     prompts = [ln.strip() for ln in path.read_text().splitlines()
-               if ln.strip() and not ln.startswith("#")]
+               if ln.strip() and not ln.startswith("#")][offset:]
     return prompts[:limit] if limit else prompts
 
 
-def build_jobs(experiment: str, prompts: list[str], seeds: list[int]) -> list[dict]:
+def build_jobs(experiment: str, prompts: list[str], seeds: list[int], prompt_offset: int = 0) -> list[dict]:
+    # prompt_idx is the index in the full bank, so offset subsets pair and seed correctly.
     jobs = []
     if experiment == "scaled":
-        for pi, prompt in enumerate(prompts):
+        for pi, prompt in enumerate(prompts, prompt_offset):
             for seed in seeds:
                 jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed, intensities=ASCENDING))
     elif experiment == "calibration":
-        for pi, prompt in enumerate(prompts):
+        for pi, prompt in enumerate(prompts, prompt_offset):
             for seed in seeds:
                 for c in CALIBRATION_LEVELS:
                     jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
                                      intensities=[c] * 5, level=c))
     elif experiment == "permuted":
-        for pi, prompt in enumerate(prompts):
+        for pi, prompt in enumerate(prompts, prompt_offset):
             for seed in seeds:
                 for li, lst in enumerate(PERMUTATIONS):
                     jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
                                      intensities=lst, perm_idx=li))
     elif experiment == "calibration_jitter":
-        for pi, prompt in enumerate(prompts):
+        for pi, prompt in enumerate(prompts, prompt_offset):
             for seed in seeds:
                 for li, c in enumerate(CALIBRATION_LEVELS):
                     rng = np.random.default_rng([pi, seed, li])  # identical lists across models
@@ -105,7 +106,7 @@ def build_jobs(experiment: str, prompts: list[str], seeds: list[int]) -> list[di
                     jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
                                      intensities=[float(v) for v in vals], level=c))
     elif experiment == "extrapolation":
-        for pi, prompt in enumerate(prompts):
+        for pi, prompt in enumerate(prompts, prompt_offset):
             for seed in seeds:
                 for c in EXTRAPOLATION_LEVELS:
                     jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
@@ -132,9 +133,9 @@ def cmd_generate(args):
     from inference_expression import IntensityEmbedding, load_models
 
     cfg = OmegaConf.load(args.config)
-    prompts = load_prompts(Path(args.prompts), args.num_prompts)
+    prompts = load_prompts(Path(args.prompts), args.num_prompts, args.prompt_offset)
     seeds = [int(s) for s in args.seeds.split(",")]
-    jobs = build_jobs(args.experiment, prompts, seeds)
+    jobs = build_jobs(args.experiment, prompts, seeds, args.prompt_offset)
     if args.limit:
         jobs = jobs[: args.limit]
 
@@ -403,6 +404,8 @@ def main():
     g.add_argument("--prompts", default=str(REPO_ROOT / "configs/eval_prompts.txt"))
     g.add_argument("--num-prompts", type=int, default=None,
                    help="use only the first N prompts (default: all)")
+    g.add_argument("--prompt-offset", type=int, default=0,
+                   help="skip the first K prompts of the bank (held-out prompt subsets)")
     g.add_argument("--seeds", default="42", help="comma-separated, e.g. 42,43,44")
     g.add_argument("--out-dir", required=True)
     g.add_argument("--limit", type=int, default=None, help="cap total jobs (smoke tests)")
