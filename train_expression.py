@@ -121,6 +121,7 @@ def main(
     logger_interval: int = 10,
     resume_from: str = None,
     max_validation_samples: int = None,
+    ema_decay: float = 0.0,
 ):
     check_min_version("0.10.0.dev0")
 
@@ -283,11 +284,13 @@ def main(
         assert checkpointing_epochs != -1
         checkpointing_steps = checkpointing_epochs * len(train_dataloader)
 
+    # Stepped once per optimizer step (see the training loop), so warmup and total
+    # are counted in optimizer steps, not micro-batches.
     lr_scheduler = get_scheduler(
         lr_scheduler,
         optimizer=optimizer,
-        num_warmup_steps=lr_warmup_steps * gradient_accumulation_steps,
-        num_training_steps=max_train_steps * gradient_accumulation_steps,
+        num_warmup_steps=lr_warmup_steps,
+        num_training_steps=max_train_steps,
     )
 
     validation_pipeline = GenPhotoPipeline(
@@ -302,6 +305,12 @@ def main(
 
     expression_adaptor.to(local_rank)
     expression_adaptor = DDP(expression_adaptor, device_ids=[local_rank], output_device=local_rank)
+
+    # EMA of the trainable weights, kept on rank 0 only (DDP keeps the replicas identical).
+    # Saved next to each checkpoint as checkpoint-step-N-ema.ckpt, loadable like any other.
+    ema_params = None
+    if ema_decay > 0 and is_main_process:
+        ema_params = [p.detach().clone().float() for p in trainable_params]
 
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / gradient_accumulation_steps)
     num_train_epochs = math.ceil(max_train_steps / num_update_steps_per_epoch)
@@ -333,7 +342,21 @@ def main(
         )
         assert len(attention_processor_u) == 0
         logger.info("Loaded encoder + attention processor weights for resume.")
-        lr_scheduler.last_epoch = first_epoch
+        if "optimizer_state_dict" in ckpt:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            logger.info("Restored optimizer state (AdamW moments).")
+        # Fast-forward the per-optimizer-step schedule to the resumed step.
+        lr_scheduler.last_epoch = global_step - 1
+        lr_scheduler.step()
+        if ema_params is not None:
+            if "ema_params" in ckpt:
+                for e, v in zip(ema_params, ckpt["ema_params"]):
+                    e.copy_(v)
+                logger.info("Restored EMA weights.")
+            else:
+                for e, p in zip(ema_params, trainable_params):
+                    e.copy_(p.detach())
+                logger.info("Checkpoint has no EMA weights; EMA restarts from the resumed weights.")
     else:
         trained_iterations = 0
 
@@ -441,6 +464,11 @@ def main(
 
             lr_scheduler.step()
             optimizer.zero_grad(set_to_none=True)
+            if ema_params is not None:
+                with torch.no_grad():
+                    torch._foreach_mul_(ema_params, ema_decay)
+                    torch._foreach_add_(ema_params, [p.detach().float() for p in trainable_params],
+                                        alpha=1.0 - ema_decay)
             global_step += 1
             micro_step = 0
             iter_end_time = time.time()
@@ -456,8 +484,26 @@ def main(
                     },
                     "optimizer_state_dict": optimizer.state_dict(),
                 }
+                if ema_params is not None:
+                    state_dict["ema_params"] = ema_params
                 torch.save(state_dict, os.path.join(save_path, f"checkpoint-step-{global_step}.ckpt"))
                 logger.info(f"Saved state to {save_path} (global_step: {global_step})")
+                if ema_params is not None:
+                    n_enc = len(encoder_trainable_params)
+                    ema_encoder = dict(zip(encoder_trainable_param_names, ema_params[:n_enc]))
+                    ema_state_dict = {
+                        "epoch": epoch,
+                        "global_step": global_step,
+                        "ema_decay": ema_decay,
+                        # buffers (non-trainable) keep their live values
+                        "camera_encoder_state_dict": {
+                            k: ema_encoder.get(k, v)
+                            for k, v in expression_adaptor.module.camera_encoder.state_dict().items()
+                        },
+                        "attention_processor_state_dict": dict(zip(attention_trainable_param_names,
+                                                                   ema_params[n_enc:])),
+                    }
+                    torch.save(ema_state_dict, os.path.join(save_path, f"checkpoint-step-{global_step}-ema.ckpt"))
 
             if is_main_process and (
                 (global_step + 1) % validation_steps == 0 or (global_step + 1) in validation_steps_tuple
