@@ -79,7 +79,7 @@ Normalized label distribution:
 
 - Control: job **750647**. Treatment: job **750648**.
 - Each runs on 1 node × 4 H100 (`train_expression_sdumont2nd.srm --nodes=1 --time=05:00:00`) with the local copies of the two configs.
-- The code is not committed yet. HEAD, `git status` and the full diff, including the untracked new files, are saved in `output/lowend/code_snapshot_2026-10-29.diff`.
+- The code was submitted uncommitted and is identical to commit `0e41505` (only this doc changed after submission). HEAD, `git status` and the full diff are also saved in `output/lowend/code_snapshot_2026-10-29.diff`.
 
 ## Pre-registered evaluation
 
@@ -101,7 +101,7 @@ Readings:
 
 Secondary (descriptive):
 
-- **Prompt groups.** Every metric split into ethnicity-named prompts (15–24) and the rest, on both detectors. The question: does the py-feat / MediaPipe disagreement concentrate in 15–24, and does the treatment change the group gap?
+- **Prompt groups.** Every metric split into ethnicity-named prompts (`prompt_idx` 14–23) and the rest, on both detectors. The question: does the py-feat / MediaPipe disagreement concentrate in that group, and does the treatment change the group gap?
 - **Recipe stabilization.** Control EMA-25k vs aug 15k on the same held-out units (paired). The question: do cosine + EMA alone remove the late drift that forced the 15k pick?
 - **Trajectory.** EMA checkpoints at 10k / 15k / 20k / 25k of both arms on the original units (prompts 0–9 × seeds 42–44). The question: is the 10-28 degradation signature (frame 0 rising, fail tail growing after ~15k) gone?
 - **FineFace.** Unpaired comparison as on 10-28: FineFace's original-unit estimate against the held-out CI.
