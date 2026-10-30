@@ -62,6 +62,7 @@ Earlier lineage: the 100k run on one RTX 3090 (`output/expression/expression-202
 | 2026-10-29 | [MEAD neutral clips + label bias](experiments/2026-10-29-mead-neutral-clips-label-bias.md) | 1,876 front neutral clips (47 actors) preprocessed on the cluster and merged (`*_happy_neutral.json`); the cluster labeler matches May's (r 0.998). Low-level constant support rises from 41/200 to 555/1,390 clips at c = 0/0.1. **py-feat AU12 has an actor-level offset tied to skin tone** (Spearman vs face luma −0.64 neutral / −0.40 happy; MediaPipe n.s.): darker faces read higher at the same geometry. Labels and eval both inherit it. |
 | 2026-10-29 | [low-end retrain design](experiments/2026-10-29-low-end-retrain-design.md) | Pre-registration (results: next row). Control (aug recipe, happy, raw labels) vs treatment (happy + neutral, **per-actor normalized labels**, **neutral → smile bridge ramps**). Both arms: 25k steps, cosine LR + EMA 0.999. Primary: EMA-25k, treatment − control on held-out units; low end judged on MediaPipe. |
 | 2026-10-29 | [low-end retrain results](experiments/2026-10-29-low-end-retrain-results.md) | All 4 pre-registered readings hold (treatment − control, held-out): CLS MediaPipe **+0.15**, ramp MP r +0.08, permuted r +0.13, MediaPipe low end −0.004 (CI < 0; mostly removing a c = 0 bump), fail 16% → 7%, identity −0.015. Treatment EMA-25k becomes the **main model**: it ties the original 25k on ramps and aug 15k on calibration/permuted, and beats each on the other's axis. Cosine + EMA remove the late drift, but the cosine control lands below aug 15k. The treatment's c = 0 reads at the py-feat level of real MEAD neutral faces and looks neutral; its py-feat gap to FineFace looks like a detector domain offset (MediaPipe ranks the other way). |
+| 2026-10-29 | [longer-training design](experiments/2026-10-29-longer-training-design.md) | Pre-registration (no result yet). Treatment recipe at 50k steps (cosine over 50k) vs the 25k main model, plus a seed-142 replicate of the 25k as the run-to-run yardstick; fresh units (prompts 10–39 / all 40 × seeds 48–50). Primary: CLS MediaPipe Δ with CI > 0 and beyond the replicate gap; guardrails on ramps, permuted following and identity. |
 
 ---
 
@@ -202,6 +203,7 @@ configs/train_genphoto/expression_sdumont2nd.yaml       # full train, SDumont2nd
 configs/train_genphoto/expression_sdumont2nd_smoke.yaml # 6-step multi-node smoke, SDumont2nd
 configs/train_genphoto/expression_calib_{aug,ctrl}.yaml # 2026-10-02 calibration arms (placeholders)
 configs/train_genphoto/expression_lowend_{ctrl,treat}.yaml # 2026-10-29 low-end retrain arms (placeholders)
+configs/train_genphoto/expression_lowend_treat_{50k,s142}.yaml # 2026-10-29 longer-training test (placeholders)
 scripts/slurm/                                    # sbatch launchers for SDumont2nd (train, smoke, batch_eval, preprocess_mead)
 configs/inference_genphoto/expression.yaml        # trained-adaptor inference
 configs/inference_genphoto/expression_baseline.yaml # fair frozen-backbone baseline
