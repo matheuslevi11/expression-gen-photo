@@ -8,6 +8,7 @@
 #   MEAD_ROOT=/petrobr/crono/.../MEAD_raw_subset OUT_ROOT=/petrobr/crono/.../MEAD_neutral_processed \
 #   EMOTION=neutral sbatch scripts/slurm/preprocess_mead_sdumont2nd.srm
 #   EMOTION=happy ACTORS="M003" NSHARDS=1 ... sbatch --gpus-per-node=1 --cpus-per-task=24 ...
+#   EXTRA_ARGS="--all-aus" ...   # extra preprocess_mead.py flags (e.g. keep all py-feat AUs)
 #
 # MEAD_ROOT must hold <actor>/video/<view>/<emotion>/level_<n>/*.mp4 (or the
 # original video*.tar archives). py-feat weights for the preprocessing detector
@@ -32,7 +33,9 @@ module load anaconda3/2024.10
 
 # conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
 set +u
-source "$(conda info --base)/etc/profile.d/conda.sh"
+# conda.sh located from the module's conda binary: `conda info --base` has hung on compute
+# nodes when several jobs start at once (2026-11-15).
+source "$(dirname "$(dirname "$(command -v conda)")")/etc/profile.d/conda.sh"
 # sbatch exports the submitting shell's env: if genphoto was active there, the
 # module load above put base conda first on PATH and a plain activate is a no-op.
 while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
@@ -68,12 +71,13 @@ for (( k = 0; k < NSHARDS; k++ )); do
     dir="${OUT_ROOT}/shard_${k}"
     mkdir -p "${dir}"
     echo "shard ${k} (GPU ${gpu}): ${shard[*]}"
-    CUDA_VISIBLE_DEVICES=${gpu} python -c "import torch; torch.zeros(1, device='cuda')" \
+    # timeout: on sdumont2nd2049-2051 this call hung for the whole 2 h job (2026-11-15)
+    CUDA_VISIBLE_DEVICES=${gpu} timeout 180 python -c "import torch; torch.zeros(1, device='cuda')" \
         || { echo "CUDA unusable on $(hostname) GPU ${gpu}" >&2; exit 3; }
     CUDA_VISIBLE_DEVICES=${gpu} python scripts/preprocess_mead.py \
         --mead-root "${MEAD_ROOT}" --out-root "${dir}" --emotion "${EMOTION}" --view front \
         --actors "${shard[@]}" --val-actors ${VAL_ACTORS} --frames-per-clip 24 --au-method pyfeat \
-        >> "${dir}/preprocess.log" 2>&1 &
+        ${EXTRA_ARGS:-} >> "${dir}/preprocess.log" 2>&1 &
     pids+=($!)
 done
 status=0

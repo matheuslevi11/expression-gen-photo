@@ -1,0 +1,66 @@
+#!/bin/bash
+# Score preprocessed MEAD frames with an independent detector (scripts/score_mead_frames.py),
+# NPROC frame shards in parallel on one SDumont2nd CPU node, then concatenate the shards.
+#
+# Usage (from the repo root):
+#   SCORER=geo       ANNOTATIONS="<root>/*/shard_*/annotations/train.json" OUT=<dir>/geo.jsonl \
+#     sbatch scripts/slurm/score_mead_frames_sdumont2nd.srm
+#   SCORER=libreface WEIGHTS=/petrobr/crono/.../weights_libreface ANNOTATIONS=... OUT=<dir>/libreface.jsonl \
+#     sbatch scripts/slurm/score_mead_frames_sdumont2nd.srm
+#
+# CPU only. When cpu_amd is congested, the CPUs of an H100 node work too, e.g.
+#   sbatch --partition=petrobr-h100 --gpus-per-node=1 --cpus-per-task=96 ... (the QoS requires one
+#   GPU, which stays unused; the arch module follows the partition).
+#
+# geo runs in the genphoto env, libreface in the isolated libreface env (CPU torch). LibreFace
+# weights must be cached on a login node first (compute nodes have no internet). Resumable:
+# rerun the same command and each shard skips frames already in OUT_shardK.jsonl.
+
+#SBATCH --job-name=score-mead
+#SBATCH --account=crono
+#SBATCH --partition=cpu_amd
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=192
+#SBATCH --time=04:00:00
+#SBATCH --output=slurm_logs/%x-%j.out
+#SBATCH --error=slurm_logs/%x-%j.err
+
+set -euo pipefail
+case "${SLURM_JOB_PARTITION:-cpu_amd}" in
+    *h100*) module load arch_gpu ;;
+    *)      module load arch_cpu_amd ;;
+esac
+module load anaconda3/2024.10
+set +u
+source "$(dirname "$(dirname "$(command -v conda)")")/etc/profile.d/conda.sh"  # not `conda info --base`: it can hang on compute nodes
+while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
+: "${SCORER:?set SCORER to geo or libreface}"
+if [ "${SCORER}" = libreface ]; then conda activate libreface; else conda activate genphoto; fi
+set -u
+cd "${SLURM_SUBMIT_DIR}"
+export PYTHONUNBUFFERED=1
+
+: "${ANNOTATIONS:?set ANNOTATIONS (space-separated files or globs)}"
+: "${OUT:?set OUT to the merged output .jsonl}"
+NPROC=${NPROC:-96}
+export OMP_NUM_THREADS=$(( SLURM_CPUS_PER_TASK / NPROC )); [ "${OMP_NUM_THREADS}" -ge 1 ] || OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=${OMP_NUM_THREADS}
+read -r -a FILES <<< "$(eval echo ${ANNOTATIONS})"
+EXTRA=()
+[ "${SCORER}" = libreface ] && EXTRA=(--weights-dir "${WEIGHTS:?set WEIGHTS to the cached LibreFace weights dir}")
+mkdir -p "$(dirname "${OUT}")"
+echo "host $(hostname); ${SCORER}; ${#FILES[@]} annotation files; ${NPROC} procs x ${OMP_NUM_THREADS} threads"
+
+pids=()
+for (( k = 0; k < NPROC; k++ )); do
+    python scripts/score_mead_frames.py --annotations "${FILES[@]}" --scorer "${SCORER}" "${EXTRA[@]}" \
+        --shard "${k}" --nshards "${NPROC}" --out "${OUT%.jsonl}_shard${k}.jsonl" \
+        > "${OUT%.jsonl}_shard${k}.log" 2>&1 &
+    pids+=($!)
+done
+status=0
+for k in "${!pids[@]}"; do wait "${pids[$k]}" || { echo "FAILED shard ${k}"; status=1; }; done
+[ "${status}" -eq 0 ] || exit 1
+cat "${OUT%.jsonl}"_shard*.jsonl > "${OUT}"
+echo "wrote $(wc -l < "${OUT}") lines -> ${OUT}"

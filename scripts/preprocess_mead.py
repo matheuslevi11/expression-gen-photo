@@ -525,16 +525,24 @@ class AUEstimator:
       directly (the high-level ``detect_image`` API in py-feat 0.6 only accepts
       file paths, so we sidestep it here).
 
+    With ``all_aus=True`` the same py-feat call also keeps every AU presence column
+    (20 for ``xgb``) per frame, as ``{AU: value}``, or ``None`` when the frame has no
+    detected face or the detector fails. ``au12`` keeps its historical 0.0 fallback so
+    existing labels stay reproducible; the ``None`` lets downstream code drop no-face frames.
+
     AU is intentionally estimated on the **uncropped** decoded video frame: the
     AU heads were trained on naturally-framed faces and can be biased by the
     tight, fixed-size crop we save to disk for training. ``process_clip`` calls
     :meth:`estimate` before applying :class:`FaceCropper`.
     """
 
-    def __init__(self, method: str) -> None:
+    def __init__(self, method: str, all_aus: bool = False) -> None:
         self.method = method
+        self.all_aus = all_aus
         self._detector = None
         self._au12_index: Optional[int] = None
+        self._au_names: List[str] = []
+        self.last_all: List[Optional[dict]] = []  # per-frame {AU: value} of the last estimate()
         if method == "pyfeat":
             Detector = _load_pyfeat()
             # py-feat 0.6 rejects None for these heads; pass the cheapest stand-ins
@@ -549,6 +557,7 @@ class AUEstimator:
                 device="cuda" if _cuda_available() else "cpu",
             )
             au_cols = list(self._detector.info.get("au_presence_columns", []))
+            self._au_names = au_cols
             for i, c in enumerate(au_cols):
                 if c.upper() == "AU12":
                     self._au12_index = i
@@ -557,7 +566,8 @@ class AUEstimator:
                 log.warning("py-feat detector exposes no AU12 column (saw %s); "
                             "AU12 will be reported as 0.0.", au_cols)
         elif method == "timeline":
-            pass
+            if all_aus:
+                raise ValueError("--all-aus needs --au-method pyfeat")
         else:
             raise ValueError(f"Unknown au-method: {method}")
 
@@ -579,27 +589,36 @@ class AUEstimator:
         return out
 
     def _pyfeat(self, frames_bgr: Sequence[np.ndarray]) -> List[float]:
-        if self._au12_index is None:
+        self.last_all = []
+        if self._au12_index is None and not self.all_aus:
             return [0.0 for _ in frames_bgr]
         out = []
         for bgr in frames_bgr:
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            full: Optional[dict] = None
             try:
                 faces = self._detector.detect_faces(rgb)
                 # detect_faces returns [[ [x1,y1,x2,y2,conf], ... ]] for single image input.
                 if not faces or not faces[0]:
                     out.append(0.0)
+                    self.last_all.append(None)
                     continue
                 landmarks = self._detector.detect_landmarks(rgb, faces)
                 aus = self._detector.detect_aus(rgb, landmarks)
                 au_arr = np.asarray(aus)  # (1, n_faces, n_aus)
-                value = float(au_arr[0, 0, self._au12_index])
+                if self.all_aus:
+                    vec = au_arr[0, 0, :]
+                    full = {n: (float(np.clip(v, 0.0, 1.0)) if np.isfinite(v) else None)
+                            for n, v in zip(self._au_names, vec.astype(float))}
+                value = float(au_arr[0, 0, self._au12_index]) if self._au12_index is not None else 0.0
                 if not np.isfinite(value):
                     value = 0.0
                 out.append(float(np.clip(value, 0.0, 1.0)))
             except Exception as e:  # noqa: BLE001 - py-feat raises various errors per frame
                 log.debug("py-feat failed on a frame (%s); using 0.0", e)
                 out.append(0.0)
+                full = None
+            self.last_all.append(full)
         return out
 
 
@@ -671,6 +690,7 @@ def process_clip(
     # trained on naturally-framed faces and is biased by the tight 256x256 crop
     # we save for training. Crop afterwards.
     au12_values = au_estimator.estimate(frames_bgr, frame_indices, total_frames)
+    all_aus = au_estimator.last_all if au_estimator.all_aus else None
     cropped = [cropper(f) for f in frames_bgr]
 
     rel_root = clip.out_dir.relative_to(out_root / "frames").as_posix()
@@ -679,7 +699,11 @@ def process_clip(
         rel_path = f"frames/{rel_root}/frame_{i:05d}.jpg"
         abs_path = out_root / rel_path
         cv2.imwrite(str(abs_path), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        frame_records.append({"path": rel_path, "au12": float(au12)})
+        rec = {"path": rel_path, "au12": float(au12)}
+        if all_aus is not None:
+            rec["frame_index"] = int(frame_indices[i])
+            rec["aus"] = all_aus[i]
+        frame_records.append(rec)
 
     return {
         "clip_id": clip.clip_id,
@@ -745,6 +769,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--val-intensity-targets", type=float, nargs="+",
                         default=[0.0, 0.25, 0.5, 0.75, 1.0],
                         help="Fixed intensity targets to attach to validation clips.")
+    parser.add_argument("--all-aus", action="store_true",
+                        help="Also store every py-feat AU per frame (record key 'aus'; None = no face) "
+                             "and the decoded frame index. Needs --au-method pyfeat.")
     parser.add_argument("--overwrite", action="store_true", help="Re-extract frames even if dir is non-empty.")
     parser.add_argument("--limit", type=int, default=None, help="Only process first N clips (debug).")
     args = parser.parse_args(argv)
@@ -764,7 +791,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     cropper = FaceCropper(target_h=args.target_size[0], target_w=args.target_size[1])
-    au_estimator = AUEstimator(args.au_method)
+    au_estimator = AUEstimator(args.au_method, all_aus=args.all_aus)
 
     records: List[dict] = []
     for i, clip in enumerate(clips, 1):
