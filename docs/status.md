@@ -2,7 +2,7 @@
 
 Living document: current state of the Generative Photography → **Generative Expressions** fork. Edited destructively — checked items get checked, wrong claims get deleted. History and full experiment write-ups live in [`experiments/`](experiments/) (append-only, date-stamped). Design rationale: [`plan.md`](plan.md). Usage commands: root [`README.md`](../README.md). Doc conventions: root [`CLAUDE.md`](../CLAUDE.md).
 
-*Last updated: November 14, 2026.*
+*Last updated: November 18, 2026.*
 
 ---
 
@@ -64,6 +64,8 @@ Earlier lineage: the 100k run on one RTX 3090 (`output/expression/expression-202
 | 2026-10-29 | [low-end retrain results](experiments/2026-10-29-low-end-retrain-results.md) | All 4 pre-registered readings hold (treatment − control, held-out): CLS MediaPipe **+0.15**, ramp MP r +0.08, permuted r +0.13, MediaPipe low end −0.004 (CI < 0; mostly removing a c = 0 bump), fail 16% → 7%, identity −0.015. Treatment EMA-25k becomes the **main model**: it ties the original 25k on ramps and aug 15k on calibration/permuted, and beats each on the other's axis. Cosine + EMA remove the late drift, but the cosine control lands below aug 15k. The treatment's c = 0 reads at the py-feat level of real MEAD neutral faces and looks neutral; its py-feat gap to FineFace looks like a detector domain offset (MediaPipe ranks the other way). |
 | 2026-10-29 | [longer-training design](experiments/2026-10-29-longer-training-design.md) | Pre-registration (results: next row). Treatment recipe at 50k steps (cosine over 50k) vs the 25k main model, plus a seed-142 replicate of the 25k as the run-to-run yardstick; fresh units (prompts 10–39 / all 40 × seeds 48–50). Primary: CLS MediaPipe Δ with CI > 0 and beyond the replicate gap; guardrails on ramps, permuted following and identity. |
 | 2026-11-14 | [longer-training results](experiments/2026-11-14-longer-training-results.md) | Reading 1 fails: 50k − 25k CLS MediaPipe **+0.005 [−0.044, +0.058]**, the size of the seed-142 replicate gap (−0.005), so the **25k stays the main model** and calibration has plateaued for this recipe. Guardrails hold, and the 50k gains beyond the replicate on ramp MediaPipe r (+0.07) and CLS py-feat (+0.07). But it **collapses prompt 31 onto the MEAD backdrop** (no face, all 3 seeds), which the metrics drop: py-feat scores no-face frames 0.0 and `fail()` counts them as passes. The replicate moves every metric by ≤ 0.04, so the 10-29 effects are not a lucky seed. |
+| 2026-11-15 | [multi-AU E0 design](experiments/2026-11-15-multi-au-e0-design.md) | Pre-registration, no training. Are MEAD brow labels usable for a 3-channel model (smile, brow raise AU1+2, brow lower AU4; one AU per physical channel + per-AU CCL)? Data: 10 actors × 8 emotions from a Hugging Face mirror (byte-identical to official files; **its actor ids are permuted for 7/10 actors**, corrected). Labels: py-feat (all 20 AUs), LibreFace, FaceMesh geometry. Gates: FACS validity in ≥ 9/10 actors, cross-detector agreement r ≥ 0.4, separability from smile |r| ≤ 0.7. |
+| 2026-11-18 | [multi-AU E0 results](experiments/2026-11-18-multi-au-e0-results.md) | **GO with 3 channels on both panels** (10 mirror actors + the pre-registered replication on the 37 workstation actors). py-feat labels all three: brow raise = mean(AU01, AU02) (validity 10/10 and 37/37, cross-detector r 0.70–0.75), brow lower = AU04 (10/10 and 37/37, r 0.60–0.65); |r| with smile ≤ 0.19, raise ~ lower −0.64 / −0.61 (gate 0.7). Geometry's brow raise fails validity on both panels, all 7 failing actors dark-skinned. Outside the gates: **py-feat AU12 fires on contempt, disgusted and angry** (0.22–0.45 actor-scaled vs LibreFace ≤ 0.14), and raise + lower co-occur in < 1% of frames. E1 recommendation: 47 actors, per-actor normalization per channel, emotions neutral / happy / surprised / fear / angry / sad. |
 
 ---
 
@@ -117,9 +119,16 @@ What separates the current "does it work" evidence from a defensible paper. Re-p
 - **py-feat AU12 reads higher on darker skin at the same mouth geometry** (2026-10-29; luma proxy, MediaPipe shows no trend). It affects (i) raw training labels, which tie the intensity scale to identity (addressed in the low-end retrain by per-actor normalization), and (ii) the eval, whose prompts 14–23 (0-based `prompt_idx`) name ethnicities. Judge absolute levels on MediaPipe, and split results by prompt group before any demographic claim.
 - **Male baseline-smile bias (data-specific)** — quantified 2026-07-14: ramp r = 0.71 (male prompts) vs 0.83 (female). FineFace shows the *opposite* skew (male 0.82 > female 0.77), localizing the bias to the MEAD-happy training distribution rather than AU-conditioned generation generally. Consider identity-conditioned training or ArcFace regularisation if cross-gender robustness is required. Measured with py-feat; given its skin-tone offset (above), part of it may be detector-driven.
 - **Option A embedding only** — scalar broadcast + CCL; no landmark flow or multi-AU control yet.
-- **Emotions** — happy only, plus neutral clips for the low end (2026-10-29); other emotions / multi-AU are a follow-up.
+- **Emotions** — training uses happy, plus neutral clips for the low end (2026-10-29). Multi-AU E0 passed (2026-11-18): py-feat brow labels on all 47 actors × 8 emotions support a 3-channel model; E1 (training) is not designed yet.
 - **No identity regularizer** in the loss (ArcFace).
 - **Camera adaptor checkpoints** from the original paper are not used; the expression encoder trains from scratch.
+
+---
+
+## Backlog
+
+- [x] **Rest of MEAD from the workstation** (2026-11-18). The other 37 actors' front clips for all 7 non-neutral emotions (23,017 unique clips, sha256-verified; happy set identical to the May annotations) are in `MEAD_raw_subset/`. The cluster now holds all 8 emotions × 47 actors (31,061 files). Method for any future pull: `scripts/mead_transfer/`.
+- [ ] **Multi-AU E1 design** (pre-registration). Fix the data plan, normalization and emotion set that 2026-11-18 recommends, plus the judges (LibreFace for brow raise; geometry's brow raise only by skin-tone group) and the leakage measures.
 
 ---
 
@@ -189,9 +198,12 @@ train_expression.py              # training entry
 inference_expression.py          # inference entry (--seed for reproducible ablations)
 genphoto/data/expression_dataset.py   # sequence_mode_probs: ramp/constant/permuted/bridge train-time mix
 tests/                               # sampling + label-normalization unit tests (python tests/<file>.py)
-scripts/preprocess_mead.py
+scripts/preprocess_mead.py                        # --all-aus keeps all 20 py-feat AUs per frame
 scripts/merge_mead_emotion.py                     # merge sharded preprocess output for one emotion into MEAD_processed
 scripts/normalize_labels_per_actor.py             # AU12 labels relative to each actor's neutral median
+scripts/score_mead_frames.py                      # LibreFace / FaceMesh-geometry scores for preprocessed MEAD frames
+scripts/analyze_multiau_e0.py                     # 2026-11-15 multi-AU E0 pre-registered criteria
+scripts/mead_transfer/                            # pack (workstation) + resumable copy of MEAD front clips
 scripts/_validate_dataset_and_model.py            # static validator
 scripts/export_results.sh                         # stage results tarball for scp/rsync pull
 scripts/batch_eval.py                             # generate/score/summarize eval sweeps (--prompt-offset: held-out prompts)
@@ -206,7 +218,7 @@ configs/train_genphoto/expression_sdumont2nd_smoke.yaml # 6-step multi-node smok
 configs/train_genphoto/expression_calib_{aug,ctrl}.yaml # 2026-10-02 calibration arms (placeholders)
 configs/train_genphoto/expression_lowend_{ctrl,treat}.yaml # 2026-10-29 low-end retrain arms (placeholders)
 configs/train_genphoto/expression_lowend_treat_{50k,s142}.yaml # 2026-10-29 longer-training test (placeholders)
-scripts/slurm/                                    # sbatch launchers for SDumont2nd (train, smoke, batch_eval, preprocess_mead)
+scripts/slurm/                                    # sbatch launchers for SDumont2nd (train, smoke, batch_eval, preprocess_mead, score_mead_frames)
 configs/inference_genphoto/expression.yaml        # trained-adaptor inference
 configs/inference_genphoto/expression_baseline.yaml # fair frozen-backbone baseline
 comp_metrics/expression_au_accuracy.py
