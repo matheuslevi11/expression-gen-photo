@@ -9,6 +9,10 @@ Mirrors ``inference_bokehK.py`` from the original codebase:
 
 The intensity list is interpreted as smile / AU12 strength in roughly ``[0, 1]``. Any 5-element
 list works (the architecture is hard-coded to 5 frames in the released checkpoints).
+
+Multi-AU checkpoints (E1) set ``prompt_templates`` (one per channel: smile, brow raise, brow lower)
+in the config; ``--intensity_list`` is then 5 rows of 3 values, e.g.
+``"[[0.0, 0.02, 0.02], [0.25, 0.03, 0.01], ...]"``.
 """
 
 import argparse
@@ -23,7 +27,7 @@ from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from genphoto.data.expression_dataset import build_ccl_embedding, create_intensity_embedding
+from genphoto.data.expression_dataset import build_conditioning
 from genphoto.models.camera_adaptor import CameraAdaptor, CameraCameraEncoder
 from genphoto.models.unet import UNet3DConditionModelCameraCond
 from genphoto.pipelines.pipeline_animation import GenPhotoPipeline
@@ -34,7 +38,11 @@ logger = logging.getLogger(__name__)
 
 
 class IntensityEmbedding(Dataset):
-    """Builds the 6-channel ``[f, 6, H, W]`` conditioning tensor for a list of smile intensities."""
+    """Builds the 6-channel ``[f, 6, H, W]`` conditioning tensor for a list of smile intensities.
+
+    ``intensity_values`` is ``[f, 1]`` (single axis, ``prompt_template``) or ``[f, 3]`` with three
+    ``prompt_templates`` (multi-AU), as in training (``expression_dataset.build_conditioning``).
+    """
 
     def __init__(
         self,
@@ -44,6 +52,7 @@ class IntensityEmbedding(Dataset):
         device: torch.device,
         sample_size=(256, 384),
         prompt_template: str = "<smile intensity: {value:.3f}>",
+        prompt_templates=None,
     ) -> None:
         self.intensity_values = intensity_values.to(device)
         self.tokenizer = tokenizer
@@ -51,6 +60,7 @@ class IntensityEmbedding(Dataset):
         self.device = device
         self.sample_size = tuple(sample_size)
         self.prompt_template = prompt_template
+        self.prompt_templates = list(prompt_templates) if prompt_templates else [prompt_template]
 
     def load(self) -> torch.Tensor:
         if len(self.intensity_values) != 5:
@@ -60,17 +70,10 @@ class IntensityEmbedding(Dataset):
             )
 
         H, W = self.sample_size
-        intensity_embedding = create_intensity_embedding(self.intensity_values, H, W).to(self.device)
-        ccl_embedding = build_ccl_embedding(
-            intensity_values=self.intensity_values,
-            tokenizer=self.tokenizer,
-            text_encoder=self.text_encoder,
-            target_height=H,
-            target_width=W,
-            prompt_template=self.prompt_template,
-            device=self.device,
-        ).to(self.device)
-        return torch.cat((intensity_embedding, ccl_embedding), dim=1)  # [f, 6, H, W]
+        return build_conditioning(
+            self.intensity_values, self.tokenizer, self.text_encoder, H, W,
+            prompt_templates=self.prompt_templates, device=self.device,
+        ).to(self.device)  # [f, 6, H, W]
 
 
 def load_models(cfg):
@@ -167,10 +170,13 @@ def run_inference(
     width: int = 384,
     prompt_template: str = "<smile intensity: {value:.3f}>",
     seed: int = 42,
+    prompt_templates=None,
 ):
     os.makedirs(output_dir, exist_ok=True)
 
-    intensity_values = torch.tensor(json.loads(intensity_list), dtype=torch.float32).unsqueeze(1)
+    intensity_values = torch.tensor(json.loads(intensity_list), dtype=torch.float32)
+    if intensity_values.dim() == 1:
+        intensity_values = intensity_values.unsqueeze(1)
     camera_embedding = IntensityEmbedding(
         intensity_values=intensity_values,
         tokenizer=tokenizer,
@@ -178,6 +184,7 @@ def run_inference(
         device=device,
         sample_size=(height, width),
         prompt_template=prompt_template,
+        prompt_templates=prompt_templates,
     ).load()
     camera_embedding = rearrange(camera_embedding.unsqueeze(0), "b f c h w -> b c f h w")
 
@@ -218,6 +225,7 @@ def main(config_path: str, base_scene: str, intensity_list: str, seed: int = 42)
         cfg.output_dir,
         device=device,
         seed=seed,
+        prompt_templates=cfg.get("prompt_templates"),
     )
 
 

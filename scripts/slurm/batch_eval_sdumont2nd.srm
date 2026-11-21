@@ -17,6 +17,11 @@
 #     --gpus-per-node=2 --cpus-per-task=48 --time=00:15:00 ...   # quick smoke
 #   SUBSET_OFFSET=10 SUBSET_PROMPTS=20 SEEDS=45,46,47 ...   # held-out units: the
 #     subset protocols use bank prompts 10-29 instead of 0-9; scaled keeps all 40
+#   ALLAU=1 ...   # after scoring, also run scripts/rescore_allau.py (all 20 py-feat AUs +
+#     FaceMesh geometry) on the experiment's manifest
+#
+# Multi-AU experiments (E1): raise_scaled, lower_scaled, raise_lower_scaled use all 40 prompts
+# like scaled; raise_calibration_jitter, lower_calibration_jitter use the prompt subset.
 #
 # Every stage is resumable, so resubmitting the same command continues where a
 # job stopped. Detector weights (py-feat, facenet, MediaPipe) must already be
@@ -41,7 +46,7 @@ module load anaconda3/2024.10
 
 # conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
 set +u
-source "$(conda info --base)/etc/profile.d/conda.sh"
+source "$(dirname "$(dirname "$(command -v conda)")")/etc/profile.d/conda.sh"  # not `conda info --base`: it can hang on compute nodes
 # sbatch exports the submitting shell's env: if genphoto was active there, the
 # module load above put base conda first on PATH and a plain activate is a no-op.
 while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done
@@ -71,8 +76,8 @@ export OMP_NUM_THREADS=$(( SLURM_CPUS_PER_TASK / ${#EXPS[@]} ))
 run_experiment() {
     local exp=$1 gpu=$2 dir="${OUT_DIR}/$1" n
     case "${exp}" in
-        scaled) n="" ;;
-        calibration|calibration_jitter|permuted|extrapolation)
+        scaled|raise_scaled|lower_scaled|raise_lower_scaled) n="" ;;
+        calibration|calibration_jitter|permuted|extrapolation|raise_calibration_jitter|lower_calibration_jitter)
             n="--num-prompts ${SUBSET_PROMPTS} --prompt-offset ${SUBSET_OFFSET}" ;;
         *) echo "unknown experiment ${exp}" >&2; return 1 ;;
     esac
@@ -83,6 +88,9 @@ run_experiment() {
         --experiment "${exp}" ${n} --seeds "${SEEDS}" ${LIMIT} --out-dir "${dir}"
     CUDA_VISIBLE_DEVICES=${gpu} python scripts/batch_eval.py score --manifest "${dir}/manifest.jsonl"
     python scripts/batch_eval.py summarize --results "${dir}/results.jsonl"
+    if [ "${ALLAU:-0}" = 1 ]; then
+        CUDA_VISIBLE_DEVICES=${gpu} python scripts/rescore_allau.py --manifest "${dir}/manifest.jsonl"
+    fi
 }
 
 mkdir -p "${OUT_DIR}"

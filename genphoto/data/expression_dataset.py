@@ -10,6 +10,11 @@ different expression intensities, plus a 6-channel ``camera_embedding`` consisti
 
 The 6-channel layout keeps the encoder configuration ``cin: 384`` (= 6 * downscale_factor**2)
 unchanged so the rest of the architecture is reused as-is.
+
+Multi-AU conditioning (E1, 2026-11-19): with three label keys (e.g. smile, brow raise, brow
+lower) each physical channel carries one key's value and each CCL channel is built from that
+key's own prompt (``<smile intensity: …>``, ``<brow raise intensity: …>``, …), so the layout
+and ``cin: 384`` stay the same. With one key everything is broadcast as before.
 """
 
 import json
@@ -41,7 +46,8 @@ def create_intensity_embedding(
     spatially uniform but temporally varying.
 
     Args:
-        intensity_values: ``[f, 1]`` tensor of scalar intensities (typically AU12 in ``[0, 1]``).
+        intensity_values: ``[f, 1]`` tensor of scalar intensities (typically AU12 in ``[0, 1]``),
+            broadcast to every channel; or ``[f, num_channels]``, one value per channel (multi-AU).
         target_height: spatial height ``H`` for the output map.
         target_width: spatial width ``W`` for the output map.
         num_channels: number of physical channels to emit (kept at 3 to keep the encoder's
@@ -51,7 +57,10 @@ def create_intensity_embedding(
         Tensor of shape ``[f, num_channels, H, W]`` with the intensity broadcast across space.
     """
     f = intensity_values.shape[0]
-    scales = intensity_values.view(f, 1, 1, 1).expand(f, num_channels, target_height, target_width)
+    k = intensity_values.numel() // f
+    if k not in (1, num_channels):
+        raise ValueError(f"Expected 1 or {num_channels} values per frame, got {k}.")
+    scales = intensity_values.reshape(f, k, 1, 1).expand(f, num_channels, target_height, target_width)
     return scales.contiguous().float()
 
 
@@ -112,6 +121,37 @@ def build_ccl_embedding(
     ccl = diffs.reshape(f, target_height, target_width).unsqueeze(1)  # [f, 1, H, W]
     ccl = ccl.expand(-1, 3, -1, -1).contiguous()  # [f, 3, H, W]
     return ccl
+
+
+def build_conditioning(
+    intensity_values: torch.Tensor,
+    tokenizer: CLIPTokenizer,
+    text_encoder: CLIPTextModel,
+    target_height: int,
+    target_width: int,
+    prompt_templates: Sequence[str],
+    device: torch.device = torch.device("cpu"),
+) -> torch.Tensor:
+    """The ``[f, 6, H, W]`` expression embedding: 3 physical + 3 CCL channels.
+
+    One template: ``intensity_values`` is ``[f, 1]`` and both halves are broadcast, exactly the
+    single-axis embedding. Three templates: ``intensity_values`` is ``[f, 3]``; physical channel
+    ``k`` carries value ``k`` and CCL channel ``k`` is the CCL map of template ``k``'s prompts.
+    """
+    templates = list(prompt_templates)
+    k = len(templates)
+    if k not in (1, 3) or intensity_values.dim() != 2 or intensity_values.shape[1] != k:
+        raise ValueError(f"Need 1 or 3 prompt templates matching intensity_values [f, k]; got "
+                         f"{k} templates and shape {tuple(intensity_values.shape)}.")
+    physical = create_intensity_embedding(intensity_values, target_height, target_width)
+    ccl = torch.cat([
+        build_ccl_embedding(intensity_values[:, j:j + 1], tokenizer, text_encoder, target_height,
+                            target_width, prompt_template=t, device=device)[:, :1]
+        for j, t in enumerate(templates)
+    ], dim=1)
+    if k == 1:
+        ccl = ccl.expand(-1, 3, -1, -1).contiguous()
+    return torch.cat((physical.to(ccl.device), ccl), dim=1)
 
 
 def _select_intensity_progression(
@@ -238,6 +278,13 @@ def _select_bridge_progression(
     return [(0, i) if i < n_low else (1, i - n_low) for i in picks]
 
 
+def frame_value(frame_meta: Mapping, key: str) -> float:
+    """A frame's label ``key``; ``au12`` falls back to the legacy ``intensity`` field."""
+    if key == "au12":
+        return float(frame_meta.get("au12", frame_meta.get("intensity", 0.0)))
+    return float(frame_meta[key])
+
+
 class ExpressionMEAD(Dataset):
     """Same-identity, varying-expression-intensity dataset built from preprocessed MEAD clips.
 
@@ -272,6 +319,16 @@ class ExpressionMEAD(Dataset):
     neutral → smile ramp; it needs ``emotion_filter`` to keep both emotions. ``ramp_emotions``
     restricts ramp/permuted sequences to clips of those emotions (a sampled index outside them is
     replaced by a uniform draw from them); constant sequences always draw from every clip.
+
+    Multi-AU (E1). ``label_keys`` lists the frame fields fed to the encoder (default ``["au12"]``),
+    with one ``prompt_templates`` entry per key. Sequence *construction* is separate:
+    ``ramp_keys`` maps an emotion to the field its clips are ordered by (ramps, permuted ramps,
+    bridges toward it, and validation ramps); emotions not listed use ``au12``. Constant sequences
+    draw a level per ordering key (uniform key, then uniform level), from every clip. With more
+    than one high emotion in ``bridge_emotions`` (``[low, high_1, high_2, ...]``) a bridge first
+    draws the high emotion uniformly. Two arms that differ only in ``label_keys`` therefore see the
+    same frames. With the defaults every random draw is the single-axis one, so old configs
+    reproduce exactly.
     """
 
     def __init__(
@@ -289,6 +346,9 @@ class ExpressionMEAD(Dataset):
         constant_level_tolerance: float = 0.1,
         ramp_emotions: Optional[Sequence[str]] = None,
         bridge_emotions: Sequence[str] = ("neutral", "happy"),
+        label_keys: Optional[Sequence[str]] = None,
+        prompt_templates: Optional[Sequence[str]] = None,
+        ramp_keys: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.root_path = root_path
         self.sample_n_frames = sample_n_frames
@@ -296,6 +356,12 @@ class ExpressionMEAD(Dataset):
         self.sample_size = sample_size
         self.is_Train = is_Train
         self.prompt_template = prompt_template
+        self.label_keys = list(label_keys) if label_keys else ["au12"]
+        self.prompt_templates = list(prompt_templates) if prompt_templates else [prompt_template]
+        if len(self.prompt_templates) != len(self.label_keys) or len(self.label_keys) not in (1, 3):
+            raise ValueError(f"label_keys {self.label_keys} and prompt_templates {self.prompt_templates} "
+                             "must have the same length, 1 or 3.")
+        self.ramp_keys = {str(e).lower(): str(k) for e, k in dict(ramp_keys or {}).items()}
 
         with open(os.path.join(root_path, annotation_json), "r") as fh:
             full = json.load(fh)
@@ -310,29 +376,36 @@ class ExpressionMEAD(Dataset):
         self.length = len(self.dataset)
 
         self.sequence_mode_probs = None
-        self.constant_pool = []
-        self.bridge_pairs = []
+        self.constant_pools: Dict[str, list] = {}
+        self.bridge_pairs: Dict[str, list] = {}
         if sequence_mode_probs is not None and is_Train:
             self.sequence_mode_probs = _normalize_mode_probs(sequence_mode_probs)
             if "constant" in self.sequence_mode_probs:
-                self.constant_pool = _build_constant_pool(
-                    [[self._frame_intensity(f) for f in c["frames"]] for c in self.dataset],
-                    sample_n_frames,
-                    np.linspace(0.0, 1.0, constant_levels).tolist(),
-                    constant_level_tolerance,
-                )
-                if not self.constant_pool:
-                    raise ValueError(
-                        f"No clip has {sample_n_frames} frames within ±{constant_level_tolerance} "
-                        f"of any of {constant_levels} levels; cannot build constant sequences."
+                order_keys = sorted({self._order_key(c) for c in self.dataset})
+                for key in order_keys:
+                    pool = _build_constant_pool(
+                        [[frame_value(f, key) for f in c["frames"]] for c in self.dataset],
+                        sample_n_frames,
+                        np.linspace(0.0, 1.0, constant_levels).tolist(),
+                        constant_level_tolerance,
                     )
+                    if not pool:
+                        raise ValueError(
+                            f"No clip has {sample_n_frames} frames within ±{constant_level_tolerance} "
+                            f"of any of {constant_levels} levels of {key!r}; cannot build constant sequences."
+                        )
+                    self.constant_pools[key] = pool
             if "bridge" in self.sequence_mode_probs:
-                low, high = (e.lower() for e in bridge_emotions)
-                self.bridge_pairs = _build_bridge_pairs(
-                    [c["actor"] for c in self.dataset], [c.get("emotion", "") for c in self.dataset], low, high
-                )
-                if not self.bridge_pairs:
-                    raise ValueError(f"No actor has both {low!r} and {high!r} clips; cannot build bridge sequences.")
+                low, *highs = (e.lower() for e in bridge_emotions)
+                if not highs:
+                    raise ValueError(f"bridge_emotions needs a low and at least one high emotion, got {bridge_emotions}.")
+                for high in highs:
+                    pairs = _build_bridge_pairs(
+                        [c["actor"] for c in self.dataset], [c.get("emotion", "") for c in self.dataset], low, high
+                    )
+                    if not pairs:
+                        raise ValueError(f"No actor has both {low!r} and {high!r} clips; cannot build bridge sequences.")
+                    self.bridge_pairs[high] = pairs
 
         self.ramp_indices = None
         if ramp_emotions is not None:
@@ -358,23 +431,37 @@ class ExpressionMEAD(Dataset):
 
     @staticmethod
     def _frame_intensity(frame_meta) -> float:
-        return float(frame_meta.get("au12", frame_meta.get("intensity", 0.0)))
+        return frame_value(frame_meta, "au12")
+
+    def _order_key(self, clip) -> str:
+        """The field this clip's frames are ordered by (``ramp_keys`` of its emotion, else au12)."""
+        return self.ramp_keys.get(clip.get("emotion", "").lower(), "au12")
+
+    def _labels(self, frame_meta) -> List[float]:
+        return [frame_value(frame_meta, k) for k in self.label_keys]
 
     def _sample_sequence_mode(self) -> str:
         modes = list(self.sequence_mode_probs)
         return random.choices(modes, weights=[self.sequence_mode_probs[m] for m in modes])[0]
 
-    def _clip_intensities(self, idx: int) -> List[float]:
-        return [self._frame_intensity(f) for f in self.dataset[idx]["frames"]]
+    def _clip_intensities(self, idx: int, key: Optional[str] = None) -> List[float]:
+        """The clip's per-frame values of ``key`` (default: the clip's own ordering key)."""
+        key = key or self._order_key(self.dataset[idx])
+        return [frame_value(f, key) for f in self.dataset[idx]["frames"]]
 
     def _train_frames(self, idx: int, mode: str) -> List[Tuple[int, int]]:
         """(clip index, frame index) of each frame of a training sequence of ``mode``."""
         if mode == "constant":
-            clip_idx, frames = _select_constant_frames(self.constant_pool, self.sample_n_frames)
+            keys = sorted(self.constant_pools)
+            key = keys[0] if len(keys) == 1 else random.choice(keys)
+            clip_idx, frames = _select_constant_frames(self.constant_pools[key], self.sample_n_frames)
             return [(clip_idx, i) for i in frames]
         if mode == "bridge":
-            clips = _select_bridge_clips(self.bridge_pairs)
-            picks = _select_bridge_progression(*(self._clip_intensities(c) for c in clips), self.sample_n_frames)
+            highs = list(self.bridge_pairs)
+            high = highs[0] if len(highs) == 1 else random.choice(highs)
+            clips = _select_bridge_clips(self.bridge_pairs[high])
+            key = self._order_key(self.dataset[clips[1]])  # order both clips by the high emotion's key
+            picks = _select_bridge_progression(*(self._clip_intensities(c, key) for c in clips), self.sample_n_frames)
             return [(clips[side], i) for side, i in picks]
         if self.ramp_indices is not None and idx not in self.ramp_index_set:
             idx = random.choice(self.ramp_indices)
@@ -387,14 +474,14 @@ class ExpressionMEAD(Dataset):
             if self.sequence_mode_probs is not None:
                 mode = self._sample_sequence_mode()
             picks = self._train_frames(idx, mode)
-            chosen_intensities = [self._frame_intensity(self.dataset[c]["frames"][i]) for c, i in picks]
+            chosen_intensities = [self._labels(self.dataset[c]["frames"][i]) for c, i in picks]
         else:
             clip = self.dataset[idx]
             frame_intensities = self._clip_intensities(idx)
             target_list = clip.get("intensity_list")
             if target_list is None:
                 chosen_indices = _select_intensity_progression(frame_intensities, self.sample_n_frames)
-                chosen_intensities = [frame_intensities[i] for i in chosen_indices]
+                chosen_intensities = [self._labels(clip["frames"][i]) for i in chosen_indices]
             else:
                 if isinstance(target_list, str):
                     target_list = json.loads(target_list)
@@ -409,7 +496,17 @@ class ExpressionMEAD(Dataset):
                 chosen_indices = _select_intensity_progression(
                     frame_intensities, self.sample_n_frames
                 )
-                chosen_intensities = [float(t) for t in target_list]
+                # Several label keys: the targets drive the channel this clip is ordered by (e.g.
+                # smile for happy); the other channels carry the shown frames' own labels.
+                key = self._order_key(clip)
+                if key not in self.label_keys:
+                    raise ValueError(f"intensity_list targets the ordering key {key!r}, not in label_keys {self.label_keys}.")
+                col = self.label_keys.index(key)
+                chosen_intensities = []
+                for t, i in zip(target_list, chosen_indices):
+                    row = self._labels(clip["frames"][i])
+                    row[col] = float(t)
+                    chosen_intensities.append(row)
             picks = [(idx, i) for i in chosen_indices]
 
         clip_indices = list(dict.fromkeys(c for c, _ in picks))
@@ -426,24 +523,17 @@ class ExpressionMEAD(Dataset):
         pixel_values = np.stack(images, axis=0)
         pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2).contiguous() / 255.0
 
-        intensity_values = torch.tensor(chosen_intensities, dtype=torch.float32).unsqueeze(1)
+        intensity_values = torch.tensor(chosen_intensities, dtype=torch.float32)  # [f, len(label_keys)]
         return pixel_values, caption, intensity_values, clip_id
 
     def get_batch(self, idx: int):
         pixel_values, caption, intensity_values, clip_id = self._load_clip(idx)
 
         H, W = self.sample_size
-        intensity_embedding = create_intensity_embedding(intensity_values, H, W)
-        ccl_embedding = build_ccl_embedding(
-            intensity_values=intensity_values,
-            tokenizer=self.tokenizer,
-            text_encoder=self.text_encoder,
-            target_height=H,
-            target_width=W,
-            prompt_template=self.prompt_template,
-            device=intensity_values.device,
-        )
-        camera_embedding = torch.cat((intensity_embedding, ccl_embedding), dim=1)  # [f, 6, H, W]
+        camera_embedding = build_conditioning(
+            intensity_values, self.tokenizer, self.text_encoder, H, W,
+            prompt_templates=self.prompt_templates, device=intensity_values.device,
+        )  # [f, 6, H, W]
 
         return pixel_values, caption, camera_embedding, intensity_values, clip_id
 

@@ -1,0 +1,148 @@
+# Multi-AU E1 (2026-11-19, docs/experiments/2026-11-19-multi-au-e1-design.md)
+# -- CONTROL arm C: smile (AU12) only.
+# Same recipe as the main model (expression_lowend_treat.yaml: cosine LR + EMA, 25k steps, the
+# ramp/bridge/constant/permuted mix) on the E1 data: 47 MEAD actors x {neutral, happy, surprised,
+# fear, angry, sad} (scripts/build_multiau_root.py; validation actors W009, W011), labels
+# re-expressed per actor on each channel. The pair expression_multiau_t / expression_multiau_c
+# shares everything except label_keys / prompt_templates, so both arms see the same frames
+# (sequence construction uses ramp_keys, not label_keys). Run each on 1 node x 4 H100
+# (scripts/slurm/train_expression_sdumont2nd.srm with --nodes=1).
+#
+# FILL IN BEFORE RUNNING: every /path/to/... placeholder below. Keep the filled-in
+# copy outside git (see CLAUDE.md).
+
+resume_from: null   # do NOT copy the RTX-3090 lineage's checkpoint-step-23000.ckpt here;
+                     # set explicitly to a /petrobr/... checkpoint only if deliberately
+                     # continuing a specific prior cluster run.
+
+output_dir: "./output/multiau/c"
+# /petrobr/crono is the project's shared scratch (group `crono`, no backup).
+# Do not use /petrobr/home/<user> here (100GB quota) — checkpoints are large.
+pretrained_model_path: "/path/to/stable-diffusion-v1-5"
+unet_subfolder: "unet_merged"
+
+train_data:
+  root_path:        "/path/to/MEAD_multiau"
+  # build_multiau_root.py --tag e1: frames without a face dropped, au12 / brow_raise / brow_lower
+  # re-expressed per actor (neutral median -> 0.02, 1 -> 1).
+  annotation_json:  "annotations/train_e1.json"
+  clip_model_path:  "/path/to/stable-diffusion-v1-5"
+  sample_n_frames:  5
+  sample_size:      [256, 384]
+  is_Train:         true
+  label_keys:       ["au12"]
+  prompt_templates: ["<smile intensity: {value:.3f}>"]
+  emotion_filter:   "all"
+  # Sequence construction (identical in both arms). Ramps / permuted ramps come from the five
+  # non-neutral emotions, each clip ordered by its emotion's channel (ramp_keys); a bridge is a
+  # neutral -> X ramp of one actor, X drawn uniformly from the five; a constant sequence holds
+  # one channel (drawn uniformly) near a uniform level, from any clip. Conditioning is always
+  # the shown frames' own labels on label_keys.
+  sequence_mode_probs: {ramp: 0.25, bridge: 0.25, constant: 0.3, permuted: 0.2}
+  ramp_emotions:   ["happy", "surprised", "fear", "angry", "sad"]
+  bridge_emotions: ["neutral", "happy", "surprised", "fear", "angry", "sad"]
+  ramp_keys:       {happy: au12, surprised: brow_raise, fear: brow_raise, angry: brow_lower, sad: brow_lower}
+  constant_levels: 11
+  constant_level_tolerance: 0.1
+
+validation_data:
+  root_path:        "/path/to/MEAD_multiau"
+  annotation_json:  "annotations/validation_e1.json"   # happy clips only (emotion_filter)
+  clip_model_path:  "/path/to/stable-diffusion-v1-5"
+  sample_n_frames:  5
+  sample_size:      [256, 384]
+  is_Train:         false
+  label_keys:       ["au12"]
+  prompt_templates: ["<smile intensity: {value:.3f}>"]
+  emotion_filter:   "happy"
+
+unet_additional_kwargs:
+  use_motion_module:               true
+  motion_module_resolutions:       [1, 2, 4, 8]
+  unet_use_cross_frame_attention:  false
+  unet_use_temporal_attention:     false
+  motion_module_mid_block:         false
+  motion_module_type:              Vanilla
+  motion_module_kwargs:
+    num_attention_heads:                 8
+    num_transformer_block:               1
+    attention_block_types:               ["Temporal_Self", "Temporal_Self"]
+    temporal_position_encoding:          true
+    temporal_position_encoding_max_len:  32
+    temporal_attention_dim_div:          1
+    zero_initialize:                     false
+
+lora_rank:           2
+lora_scale:          1.0
+lora_ckpt:           "/path/to/RealEstate10K_LoRA.ckpt"
+motion_module_ckpt:  "/path/to/v3_sd15_mm.ckpt"
+motion_lora_rank:    0
+motion_lora_scale:   1.0
+
+# 6 input channels (3 physical intensity + 3 CCL) * downscale_factor**2 (8**2=64) = 384.
+# Keep cin: 384 unless you change the channel layout in expression_dataset.py.
+camera_encoder_kwargs:
+  downscale_factor:                    8
+  channels:                            [320, 640, 1280, 1280]
+  nums_rb:                             2
+  cin:                                 384
+  ksize:                               1
+  sk:                                  true
+  use_conv:                            false
+  compression_factor:                  1
+  temporal_attention_nhead:            8
+  attention_block_types:               ["Temporal_Self"]
+  temporal_position_encoding:          true
+  temporal_position_encoding_max_len:  16
+
+attention_processor_kwargs:
+  add_spatial:               false
+  spatial_attn_names:        'attn1'
+  add_temporal:              true
+  temporal_attn_names:       '0'
+  camera_feature_dimensions: [320, 640, 1280, 1280]
+  query_condition:           true
+  key_value_condition:       true
+  scale:                     1.0
+
+noise_scheduler_kwargs:
+  num_train_timesteps:  1000
+  beta_start:           0.00085
+  beta_end:             0.012
+  beta_schedule:        "linear"
+  steps_offset:         1
+  clip_sample:          false
+
+do_sanity_check: true
+
+max_train_epoch:        -1
+max_train_steps:        25000
+validation_steps:       5000
+validation_steps_tuple: [200]
+
+learning_rate: 1.e-4
+# Cosine decay from 1e-4 to 0 over max_train_steps (no warmup, so the first steps match the
+# 2026-10-02 arms) + EMA of the trainable weights: the 10-28 trajectory showed late-training
+# drift at constant LR. Each checkpoint also writes checkpoint-step-N-ema.ckpt (inference format).
+lr_scheduler:    "cosine"
+lr_warmup_steps: 0
+ema_decay:       0.999
+
+# 96 Xeon cores / 4 tasks per node (--ntasks-per-node=4, --cpus-per-task=24 in the
+# .srm script) leaves headroom above num_workers per task; tune alongside
+# --cpus-per-task, not in isolation.
+num_workers:           12
+train_batch_size:      1
+# 1 node x 4 GPUs x accumulation 1 = effective batch 4, matching the RTX-3090
+# baseline (1 GPU x accumulation 4); lr_warmup_steps=0 + constant LR, so the
+# schedule is identical too.
+gradient_accumulation_steps: 1
+checkpointing_epochs:  -1
+checkpointing_steps:   2500
+
+mixed_precision_training: true
+global_seed:              42
+logger_interval:          50
+
+# Cap each validation event to 8 clips (~70 s) instead of all 176 (~25 min).
+max_validation_samples: 8

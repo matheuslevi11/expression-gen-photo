@@ -37,7 +37,7 @@ module load anaconda3/2024.10
 
 # conda's activate.d hooks (e.g. libblas_mkl_activate.sh) reference unset vars.
 set +u
-source "$(conda info --base)/etc/profile.d/conda.sh"
+source "$(dirname "$(dirname "$(command -v conda)")")/etc/profile.d/conda.sh"  # not `conda info --base`: it can hang on compute nodes
 # sbatch exports the submitting shell's env: if genphoto was active there, the
 # module load above put base conda first on PATH and a plain activate is a no-op.
 while [ "${CONDA_SHLVL:-0}" -gt 0 ]; do conda deactivate; done

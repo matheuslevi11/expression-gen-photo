@@ -33,6 +33,17 @@ Experiments (--experiment):
     permuted       prompts x seeds x 3 fixed non-monotonic lists        (Tier 2)
     extrapolation  prompts x constant lists outside [0,1]               (Tier 3)
 
+Multi-AU (E1, 2026-11-19). Every job also carries ``brow_raise`` and ``brow_lower`` command lists.
+A channel the experiment does not vary is *held* near neutral: 0.02 (the label of each actor's
+neutral median after per-actor normalization) with the calibration jitter, so its CCL channel is
+never exactly zero (as in training). Brow experiments vary one brow channel with the smile held:
+    raise_scaled / lower_scaled                  the ``scaled`` ramp on that channel
+    raise_calibration_jitter / lower_calibration_jitter   the ``calibration_jitter`` levels on it
+    raise_lower_scaled                           both brow channels ramp together (extrapolation:
+                                                 rare in MEAD)
+A config with three ``prompt_templates`` generates from all three lists; a single-axis model uses
+the smile list only, so on brow experiments it is the matched null (same units, same noise).
+
 External samples (e.g. a FineFace sweep for the head-to-head) can be scored by
 hand-writing a manifest whose entries use "frames": [png paths] instead of
 "gif": path — the scorer treats the frame list as the sequence.
@@ -66,6 +77,35 @@ CALIBRATION_LEVELS = [round(c, 1) for c in np.arange(0.0, 1.01, 0.1)]
 # which never happens in training; a tiny per-frame jitter keeps the CCL training-like.
 CALIBRATION_JITTER = 0.02
 EXTRAPOLATION_LEVELS = [-0.5, -0.25, 1.25, 1.5]
+NEUTRAL_LEVEL = 0.02
+CHANNELS = ("intensities", "brow_raise", "brow_lower")  # smile keeps its legacy key
+AXIS_EXPERIMENTS = {
+    "raise_scaled": (("brow_raise",), "scaled"),
+    "raise_calibration_jitter": (("brow_raise",), "calibration_jitter"),
+    "lower_scaled": (("brow_lower",), "scaled"),
+    "lower_calibration_jitter": (("brow_lower",), "calibration_jitter"),
+    "raise_lower_scaled": (("brow_raise", "brow_lower"), "scaled"),
+}
+EXPERIMENTS = ["scaled", "calibration", "calibration_jitter", "permuted", "extrapolation", *AXIS_EXPERIMENTS]
+
+
+def jitter_list(c: float, rng) -> list[float]:
+    """5 values within +-CALIBRATION_JITTER of c, distinct at the CCL prompt's 3-decimal precision
+    (so no two frames share a prompt, whose CCL would be zero), reflected at 0 and 1."""
+    grid = np.abs(np.round(c + np.arange(-20, 21) / 1000 * CALIBRATION_JITTER / 0.02, 3))
+    grid = np.unique(np.where(grid > 1.0, np.round(2.0 - grid, 3), grid))
+    return [float(v) for v in rng.choice(grid, size=5, replace=False)]
+
+
+def add_holds(jobs: list[dict], varied: tuple[str, ...] = ("intensities",)) -> list[dict]:
+    """Fill every channel not in ``varied`` with a held near-neutral list, identical across models."""
+    for j in jobs:
+        for ci, ch in enumerate(CHANNELS):
+            if ch not in varied:
+                rng = np.random.default_rng([j["prompt_idx"], j["seed"], j.get("level_idx", 0),
+                                             j.get("perm_idx") or 0, 100 + ci])
+                j[ch] = jitter_list(NEUTRAL_LEVEL, rng)
+    return jobs
 
 
 def load_prompts(path: Path, limit: int | None, offset: int = 0) -> list[str]:
@@ -76,6 +116,21 @@ def load_prompts(path: Path, limit: int | None, offset: int = 0) -> list[str]:
 
 def build_jobs(experiment: str, prompts: list[str], seeds: list[int], prompt_offset: int = 0) -> list[dict]:
     # prompt_idx is the index in the full bank, so offset subsets pair and seed correctly.
+    if experiment in AXIS_EXPERIMENTS:
+        varied, base = AXIS_EXPERIMENTS[experiment]
+        jobs = _base_jobs(base, prompts, seeds, prompt_offset)
+        for j in jobs:
+            for ch in varied:
+                j[ch] = list(j["intensities"])
+            j["axis"] = "+".join(varied)
+        return add_holds(jobs, varied)
+    jobs = _base_jobs(experiment, prompts, seeds, prompt_offset)
+    for j in jobs:
+        j["axis"] = "smile"
+    return add_holds(jobs)
+
+
+def _base_jobs(experiment: str, prompts: list[str], seeds: list[int], prompt_offset: int = 0) -> list[dict]:
     jobs = []
     if experiment == "scaled":
         for pi, prompt in enumerate(prompts, prompt_offset):
@@ -98,13 +153,8 @@ def build_jobs(experiment: str, prompts: list[str], seeds: list[int], prompt_off
             for seed in seeds:
                 for li, c in enumerate(CALIBRATION_LEVELS):
                     rng = np.random.default_rng([pi, seed, li])  # identical lists across models
-                    # 5 values distinct at the CCL prompt's 3-decimal precision, so no two
-                    # frames share a prompt (that frame's CCL would be zero); reflected at 0/1.
-                    grid = np.abs(np.round(c + np.arange(-20, 21) / 1000 * CALIBRATION_JITTER / 0.02, 3))
-                    grid = np.unique(np.where(grid > 1.0, np.round(2.0 - grid, 3), grid))
-                    vals = rng.choice(grid, size=5, replace=False)
                     jobs.append(dict(prompt_idx=pi, prompt=prompt, seed=seed,
-                                     intensities=[float(v) for v in vals], level=c))
+                                     intensities=jitter_list(c, rng), level=c, level_idx=li))
     elif experiment == "extrapolation":
         for pi, prompt in enumerate(prompts, prompt_offset):
             for seed in seeds:
@@ -117,8 +167,9 @@ def build_jobs(experiment: str, prompts: list[str], seeds: list[int], prompt_off
 
 
 def job_name(experiment: str, job: dict) -> str:
+    varied = AXIS_EXPERIMENTS[experiment][0][0] if experiment in AXIS_EXPERIMENTS else "intensities"
     tag = "_".join(f"{v:+.2f}".replace("+", "p").replace("-", "m").replace(".", "")
-                   for v in job["intensities"])
+                   for v in job[varied])
     return f"{experiment}_p{job['prompt_idx']:03d}_s{job['seed']}_{tag}"
 
 
@@ -154,17 +205,25 @@ def cmd_generate(args):
 
     log.info("Loading pipeline once from %s ...", args.config)
     pipeline, device = load_models(cfg)
+    templates = list(cfg.get("prompt_templates") or [])
+    if templates and len(templates) not in (1, 3):
+        raise ValueError(f"prompt_templates must have 1 or 3 entries, got {templates}")
+    log.info("conditioning channels: %s", templates or "smile only (single axis)")
 
     with manifest_path.open("a") as mf:
         for i, job in enumerate(pending):
             name = job_name(args.experiment, job)
             gif_path = gif_dir / f"{name}.gif"
-            intensities = torch.tensor(job["intensities"], dtype=torch.float32).unsqueeze(1)
+            if len(templates) == 3:
+                intensities = torch.tensor([job[ch] for ch in CHANNELS], dtype=torch.float32).T  # [5, 3]
+            else:
+                intensities = torch.tensor(job["intensities"], dtype=torch.float32).unsqueeze(1)
             camera_embedding = IntensityEmbedding(
                 intensity_values=intensities,
                 tokenizer=pipeline.tokenizer,
                 text_encoder=pipeline.text_encoder,
                 device=device,
+                prompt_templates=templates or None,
             ).load()
             camera_embedding = rearrange(camera_embedding.unsqueeze(0), "b f c h w -> b c f h w")
 
@@ -182,6 +241,7 @@ def cmd_generate(args):
                 id=name, experiment=args.experiment, gif=str(gif_path),
                 config=str(args.config),
                 adaptor_ckpt=cfg.get("expression_adaptor_ckpt"),
+                channels=len(templates) or 1,
                 **job,
             )
             mf.write(json.dumps(entry) + "\n")
@@ -311,7 +371,9 @@ def cmd_score(args):
             targets = entry["intensities"]
             rec = dict(id=entry["id"], experiment=entry["experiment"], targets=targets,
                        prompt_idx=entry.get("prompt_idx"), seed=entry.get("seed"),
-                       level=entry.get("level"), perm_idx=entry.get("perm_idx"))
+                       level=entry.get("level"), perm_idx=entry.get("perm_idx"),
+                       axis=entry.get("axis", "smile"),
+                       brow_raise=entry.get("brow_raise"), brow_lower=entry.get("brow_lower"))
             if aus:
                 au12 = aus(frames)
                 rec.update(au12=au12, au12_pearson=pearson(au12, targets),
@@ -399,8 +461,7 @@ def main():
 
     g = sub.add_parser("generate", help="generate a sweep of samples (one pipeline load)")
     g.add_argument("--config", required=True, help="inference YAML (trained or baseline)")
-    g.add_argument("--experiment", required=True,
-                   choices=["scaled", "calibration", "calibration_jitter", "permuted", "extrapolation"])
+    g.add_argument("--experiment", required=True, choices=EXPERIMENTS)
     g.add_argument("--prompts", default=str(REPO_ROOT / "configs/eval_prompts.txt"))
     g.add_argument("--num-prompts", type=int, default=None,
                    help="use only the first N prompts (default: all)")

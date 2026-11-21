@@ -10,6 +10,11 @@ LibreFace covers 12 AUs: AU01,02,04,05,06,09,12,15,17,20,25,26.
 Usage (run from repo root)::
     conda run -n libreface python scripts/rescore_libreface.py \
         --manifest inference_output/batch_eval/trained/manifest.jsonl --experiment scaled
+
+On the cluster (no internet on compute nodes) pass the cached ``--weights-dir``, score every
+experiment with ``--experiment all``, and split the work over CPU processes with
+``--shard k --nshards n`` (each shard writes ``results_libreface_shard<k>.jsonl``; concatenate).
+Correlations use the smile targets (``intensities``); brow commands are in the manifest.
 """
 from __future__ import annotations
 
@@ -57,6 +62,9 @@ def load_frames(entry):
     return frames
 
 
+WEIGHTS_DIR = None
+
+
 def score_frames(frames):
     """Return {AU_name: [per-frame intensity]} via LibreFace; NaN on failure."""
     import libreface
@@ -67,7 +75,8 @@ def score_frames(frames):
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
                 tmp_path = tmp.name
             Image.fromarray(rgb).save(tmp_path)
-            res = libreface.get_au_intensities_and_detect_aus(tmp_path, device="cpu")
+            kw = {"weights_download_dir": WEIGHTS_DIR} if WEIGHTS_DIR else {}
+            res = libreface.get_au_intensities_and_detect_aus(tmp_path, device="cpu", **kw)
             os.unlink(tmp_path)
             inten = res[1] if isinstance(res, tuple) else res
             vals = {}
@@ -86,15 +95,22 @@ def score_frames(frames):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--manifest", required=True)
-    ap.add_argument("--experiment", default="scaled", help="only score this experiment type")
+    ap.add_argument("--experiment", default="scaled", help="only score this experiment type ('all': every one)")
     ap.add_argument("--results", default=None)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--weights-dir", default=None, help="cached LibreFace weights (compute nodes have no internet)")
+    ap.add_argument("--shard", type=int, default=0)
+    ap.add_argument("--nshards", type=int, default=1)
     args = ap.parse_args()
+    global WEIGHTS_DIR
+    WEIGHTS_DIR = args.weights_dir
 
     entries = [json.loads(l) for l in Path(args.manifest).read_text().splitlines() if l.strip()]
-    if args.experiment:
+    if args.experiment and args.experiment != "all":
         entries = [e for e in entries if e.get("experiment") == args.experiment]
-    results_path = Path(args.results or Path(args.manifest).parent / "results_libreface.jsonl")
+    entries = entries[args.shard::args.nshards]
+    default = "results_libreface.jsonl" if args.nshards == 1 else f"results_libreface_shard{args.shard}.jsonl"
+    results_path = Path(args.results or Path(args.manifest).parent / default)
     done = set()
     if results_path.exists():
         done = {json.loads(l)["id"] for l in results_path.read_text().splitlines() if l.strip()}
